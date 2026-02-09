@@ -71,17 +71,32 @@ sleep 3
 echo "Starting Next.js frontend..."
 cd "$PROJECT_ROOT/frontend"
 
-# Check if node_modules exists
+# Check if node_modules exists and is valid
 if [ ! -d "node_modules" ]; then
     echo "Installing npm dependencies..."
     npm install
+elif [ ! -f "node_modules/.bin/next" ]; then
+    echo "⚠️  node_modules exists but is incomplete. Reinstalling..."
+    rm -rf node_modules
+    npm install
 fi
 
-# Start Next.js in background on port 5000
+# Start Next.js in background on port 5001
 npm run dev -- -p 5001 &
 FRONTEND_PID=$!
 echo "Frontend started (PID: $FRONTEND_PID)"
 echo ""
+
+# Wait for frontend to start and verify it's still running
+echo "Waiting for frontend to initialize..."
+sleep 3
+
+if ! kill -0 $FRONTEND_PID 2>/dev/null; then
+    echo "❌ ERROR: Frontend failed to start!"
+    echo "   Check for errors above or try: cd frontend && npm install"
+    kill $BACKEND_PID 2>/dev/null || true
+    exit 1
+fi
 
 echo "=========================================="
 echo "  Servers are running!"

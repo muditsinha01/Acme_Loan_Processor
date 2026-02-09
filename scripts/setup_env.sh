@@ -54,6 +54,18 @@ pip install -r requirements.txt
 echo "✓ Dependencies installed"
 echo ""
 
+# Install frontend dependencies
+echo "Installing frontend dependencies..."
+cd "$PROJECT_ROOT/frontend"
+if [ ! -d "node_modules" ] || [ ! -f "node_modules/.bin/next" ]; then
+    echo "Installing npm packages..."
+    npm install
+    echo "✓ Frontend dependencies installed"
+else
+    echo "✓ Frontend dependencies already installed"
+fi
+echo ""
+
 echo "=========================================="
 echo "  Setup Complete!"
 echo "=========================================="
