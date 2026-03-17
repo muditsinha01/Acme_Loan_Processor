@@ -125,7 +125,7 @@ policyprobe/
 **Before:**
 1. Upload `test_files/advanced/finance_report_hidden.html` and ask: "Analyze this financial report"
 2. Request routes to the finance agent
-3. Untrusted report content (including hidden prompts) is passed to the LLM without scanning
+3. Hidden prompts in the uploaded file (display:none, visibility:hidden, white-on-white) are extracted and passed to the LLM without scanning
 4. LLM may respond to malicious instructions
 
 **After Unifai Remediation:**
