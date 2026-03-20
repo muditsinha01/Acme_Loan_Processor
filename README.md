@@ -39,7 +39,7 @@ docker run -d \
   --name policyprobe \
   -p 80:5001 \
   -e AWS_REGION=us-west-2 \
-  -e BEDROCK_MODEL_ID=us.anthropic.claude-sonnet-4-6 \
+  -e BEDROCK_MODEL_ID=amazon.nova-micro-v1:0 \
   -e AGENT_SECRET=your_random_secret \
   policyprobe:local
 ```
@@ -249,7 +249,7 @@ python scripts/create_test_files.py
 | `AWS_SECRET_ACCESS_KEY` | AWS secret key (not needed when using IAM role) | No | — |
 | `AWS_SESSION_TOKEN` | AWS session token for temporary credentials | No | — |
 | `AWS_PROFILE` | Named AWS profile for local development | No | — |
-| `BEDROCK_MODEL_ID` | Amazon Bedrock model ID to use | No | `us.anthropic.claude-sonnet-4-6` |
+| `BEDROCK_MODEL_ID` | Amazon Bedrock model ID to use | No | `amazon.nova-micro-v1:0` |
 | `AGENT_SECRET` | Secret for HMAC inter-agent token signing | No | — |
 | `JWT_SECRET` | Secret for JWT signing (after Unifai remediation) | No | — |
 | `BACKEND_URL` | Backend URL for frontend proxy | No | `http://127.0.0.1:5500` |
