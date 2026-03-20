@@ -4,21 +4,25 @@ Finance Agent
 Handles financial data queries with HIGH privilege level.
 Should only be accessible to authorized callers.
 
-SECURITY NOTES (for Unifai demo):
-- Authorization check exists but has bypass for "internal" calls
-- Sensitive financial data returned without audit logging
-- No rate limiting on data access
-- PROMPT INJECTION VULNERABILITY: Untrusted finance content (reports, documents)
-  is passed to the LLM without prompt-injection scanning. External reports,
-  partner documents, or user-provided financial content may contain hidden or
-  malicious instructions that manipulate LLM behavior.
+SECURITY NOTES (Unifai / Lineaje demo — AI_APP_SEC_002):
+- Control: Encoded prompts — instructions concealed in Base64, hex, zero-width
+  characters, structured payloads (JSON/XML), duplicated metadata, or content
+  that is CSS-hidden but still extracted by parsers.
+- Risk: Invisible or obfuscated prompt injection, safety / policy bypass,
+  leakage of system instructions, corrupted downstream workflows; low attack
+  complexity, no privileges required (OWASP LLM01, LLM04, LLM05, LLM08;
+  OWASP-ASI ASI-01, ASI-04, ASI-07, ASI-09; EU AI Act transparency themes).
+- This agent passes extracted document text to the LLM without decoding or
+  policy checks on those channels.
+- Additional demo issues: internal auth bypass, missing audit logging, no
+  rate limiting (separate from AI_APP_SEC_002).
 """
 
 import logging
 from typing import Any, Optional
 
 from .auth.agent_auth import AgentIdentity, AgentAuthenticator
-from llm.openrouter import OpenRouterClient
+from llm.bedrock import BedrockClient
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +44,7 @@ class FinanceAgent:
     ALLOWED_ROLES = ["finance_admin", "cfo", "admin"]
     PRIVILEGE_LEVEL = "high"
 
-    def __init__(self, llm_client: OpenRouterClient):
+    def __init__(self, llm_client: BedrockClient):
         self.llm_client = llm_client
         self.authenticator = AgentAuthenticator()
         self.agent_id = "finance"
@@ -109,10 +113,10 @@ class FinanceAgent:
         user_message = context.get("user_message", "")
         file_contents = context.get("file_contents", [])
 
-        # VULNERABILITY (Prompt Injection Demo): When user provides finance content
-        # (e.g., uploaded report, partner document), we pass it directly to the LLM
-        # without scanning for hidden prompts or malicious instructions.
-        # Unifai remediation: apply backend/policies/prompt_injection.py before LLM.
+        # VULNERABILITY (AI_APP_SEC_002): Extracted report text (including Base64,
+        # hex, zero-width-delimited tokens, JSON "config" blocks, and parser-visible
+        # hidden HTML) is concatenated and sent to the LLM with no decoding guard
+        # or instruction-boundary enforcement. Remediation: scan/sanitize before LLM.
         if file_contents:
             response = await self._analyze_external_finance_report(
                 user_message=user_message,
@@ -176,17 +180,18 @@ class FinanceAgent:
         """
         Analyze external finance content (reports, partner documents) via LLM.
 
-        VULNERABILITY (Prompt Injection - Unifai Demo):
-        Untrusted finance content is passed directly to the LLM without any
-        prompt-injection scanning. Reports may contain:
-        - Hidden text (white-on-white, display:none, visibility:hidden)
-        - Base64-encoded malicious instructions
-        - Direct prompt injection strings ("ignore previous instructions", etc.)
-        - Malicious content in metadata or embedded elements
+        VULNERABILITY (AI_APP_SEC_002 — encoded / obfuscated prompts):
+        Untrusted content is passed through to the model without detecting
+        instructions embedded as:
+        - Base64 or hex strings (possibly labeled as audit trails / checksums)
+        - Zero-width Unicode separators splitting covert tokens
+        - Structured payloads (e.g. JSON) with fields that read as operational
+          config but steer model behavior
+        - Duplicated metadata strings in body text when <meta> is ignored by extractors
+        - CSS-hidden blocks that naive HTML pipelines still concatenate into text
 
-        This content flows straight into downstream LLM processing. After
-        Unifai remediation, backend/policies/prompt_injection.py should
-        scan and block/sanitize before the LLM call.
+        Maps to OWASP GenAI LLM Top 10 and Agentic Security Initiative controls
+        cited in AI_APP_SEC_002; remediation should run before this LLM call.
         """
         combined = "\n\n".join(
             f"Report: {r.get('filename', 'unknown')}\n{r.get('extracted_content', '')}"
