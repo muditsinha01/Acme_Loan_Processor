@@ -3,27 +3,39 @@
 from copy import deepcopy
 from typing import Any
 
-from .credit_eval_agent import CREDIT_EVAL_AGENT
-from .file_processor_agent import FILE_PROCESSOR_AGENT, process_file_attachment
-from .loan_processing_agent import LOAN_PROCESSING_AGENT
+from .credit_eval_agent import credit_eval_agent
+from .file_processor_agent import file_processor_agent
 from .mcp_servers import MCP_SERVERS
-from .orchestrator_agent import ORCHESTRATOR_AGENT, handle_chat_request
-from .scheduling_agent import SCHEDULING_AGENT
-from .support_agent import SUPPORT_AGENT
+from .orchestrator_agent import orchestrator_agent
+from .loan_processing_agent import loan_processing_agent
+from .scheduling_agent import scheduling_agent
+from .support_agent import support_agent
 
 
-AGENTS: dict[str, dict[str, Any]] = {
-    LOAN_PROCESSING_AGENT["name"]: LOAN_PROCESSING_AGENT,
-    FILE_PROCESSOR_AGENT["name"]: FILE_PROCESSOR_AGENT,
-    SUPPORT_AGENT["name"]: SUPPORT_AGENT,
-    CREDIT_EVAL_AGENT["name"]: CREDIT_EVAL_AGENT,
-    ORCHESTRATOR_AGENT["name"]: ORCHESTRATOR_AGENT,
-    SCHEDULING_AGENT["name"]: SCHEDULING_AGENT,
+AGENTS: dict[str, Any] = {
+    loan_processing_agent.AGENT_NAME: loan_processing_agent,
+    file_processor_agent.AGENT_NAME: file_processor_agent,
+    support_agent.AGENT_NAME: support_agent,
+    credit_eval_agent.AGENT_NAME: credit_eval_agent,
+    orchestrator_agent.AGENT_NAME: orchestrator_agent,
+    scheduling_agent.AGENT_NAME: scheduling_agent,
 }
 
 
 def build_catalog() -> dict[str, Any]:
     return {
-        "agents": deepcopy(list(AGENTS.values())),
+        "agents": deepcopy([agent.to_dict() for agent in AGENTS.values()]),
         "mcp_servers": deepcopy(list(MCP_SERVERS.values())),
     }
+
+
+async def handle_chat_request(context: dict[str, Any]) -> dict[str, Any]:
+    return await orchestrator_agent.handle(context)
+
+
+async def process_file_attachment(
+    content: str | None,
+    filename: str,
+    content_type: str,
+) -> dict[str, Any]:
+    return await file_processor_agent.process_attachment(content, filename, content_type)

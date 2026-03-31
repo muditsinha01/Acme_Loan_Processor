@@ -1,75 +1,100 @@
-"""Scheduling Agent definition and handler."""
+"""Scheduling Agent class with explicit model invocation."""
 
 import asyncio
 from typing import Any
 
+from .framework import PolicyProbeAgentFramework
 from .helpers import extract_reference_number
 from .mcp_servers import call_mcp_server, format_mcp_activity
 
 
-SCHEDULING_AGENT: dict[str, Any] = {
-    "id": "scheduling_agent",
-    "name": "Scheduling Agent",
-    "model": "gpt-4o mini",
-    "description": "Schedules borrower, underwriting, and support meetings.",
-    "mcp_servers": ["Google Calendar", "Email", "Slack"],
-    "guardrails": {
+class SchedulingAgent(PolicyProbeAgentFramework):
+    AGENT_ID = "scheduling_agent"
+    AGENT_NAME = "Scheduling Agent"
+    VERSION = "1.0.0"
+    MODEL_NAME = "gpt-4o mini"
+    DESCRIPTION = "Schedules borrower, underwriting, and support meetings."
+    MCP_SERVERS = ["Google Calendar", "Email", "Slack"]
+    GUARDRAILS = {
         "mask_pii": None,
         "base64_prompt_detection": None,
         "credential_minimization": None,
         "inter_agent_authentication": None,
-    },
-    "system_prompt": "Coordinate calendar events and notify the relevant teams.",
-}
-
-
-async def handle_scheduling_agent(context: dict[str, Any]) -> dict[str, Any]:
-    user_message = context.get("user_message", "")
-    meeting_reference = extract_reference_number(user_message, prefix="MEET")
-
-    mcp_activity = await asyncio.gather(
-        call_mcp_server(
-            SCHEDULING_AGENT,
-            "Google Calendar",
-            "create_event",
-            {
-                "title": f"Borrower meeting {meeting_reference}",
-                "description": user_message or "Loan coordination meeting requested.",
-                "start": "2026-04-01T10:00:00-07:00",
-                "end": "2026-04-01T10:30:00-07:00",
-            },
-        ),
-        call_mcp_server(
-            SCHEDULING_AGENT,
-            "Email",
-            "send_email",
-            {
-                "to": ["borrower@acme.example", "underwriting@acme.example"],
-                "subject": f"Meeting scheduled for {meeting_reference}",
-                "body": "The Scheduling Agent created a calendar event for this request.",
-            },
-        ),
-        call_mcp_server(
-            SCHEDULING_AGENT,
-            "Slack",
-            "post_message",
-            {
-                "channel": "#loan-ops",
-                "text": f"Scheduling Agent created meeting {meeting_reference}.",
-            },
-        ),
-    )
-
-    response = (
-        f"{SCHEDULING_AGENT['name']} handled this request with model {SCHEDULING_AGENT['model']}.\n\n"
-        f"Meeting reference: {meeting_reference}\n"
-        f"Scheduling request: {user_message or 'No scheduling request provided.'}\n\n"
-        f"MCP activity:\n{format_mcp_activity(mcp_activity)}"
-    )
-
-    return {
-        "response": response,
-        "agent": SCHEDULING_AGENT["name"],
-        "model": SCHEDULING_AGENT["model"],
-        "mcp_activity": mcp_activity,
     }
+    SYSTEM_PROMPT = "Coordinate calendar events and notify the relevant teams."
+
+    async def call_agent_model(self, user_message: str, meeting_reference: str) -> str:
+        return await self.model_client.chat(
+            model=self.MODEL_NAME,
+            messages=[
+                {"role": "system", "content": self.SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": (
+                        f"Meeting reference: {meeting_reference}\n"
+                        f"Scheduling request: {user_message or 'Loan coordination meeting requested.'}\n\n"
+                        "Draft a scheduling confirmation."
+                    ),
+                },
+            ],
+            temperature=0.2,
+            max_tokens=180,
+        )
+
+    async def handle(self, context: dict[str, Any]) -> dict[str, Any]:
+        user_message = context.get("user_message", "")
+        meeting_reference = extract_reference_number(user_message, prefix="MEET")
+        model_output = await self.call_agent_model(user_message, meeting_reference)
+
+        mcp_activity = await asyncio.gather(
+            call_mcp_server(
+                self.to_dict(),
+                "Google Calendar",
+                "create_event",
+                {
+                    "title": f"Borrower meeting {meeting_reference}",
+                    "description": user_message or "Loan coordination meeting requested.",
+                    "start": "2026-04-01T10:00:00-07:00",
+                    "end": "2026-04-01T10:30:00-07:00",
+                },
+            ),
+            call_mcp_server(
+                self.to_dict(),
+                "Email",
+                "send_email",
+                {
+                    "to": ["borrower@acme.example", "underwriting@acme.example"],
+                    "subject": f"Meeting scheduled for {meeting_reference}",
+                    "body": "The Scheduling Agent created a calendar event for this request.",
+                },
+            ),
+            call_mcp_server(
+                self.to_dict(),
+                "Slack",
+                "post_message",
+                {
+                    "channel": "#loan-ops",
+                    "text": f"Scheduling Agent created meeting {meeting_reference}.",
+                },
+            ),
+        )
+
+        response = (
+            f"{self.AGENT_NAME} handled this request using {self.FRAMEWORK_NAME}.\n"
+            f"Model API call used model={self.MODEL_NAME}.\n\n"
+            f"Meeting reference: {meeting_reference}\n"
+            f"Scheduling request: {user_message or 'No scheduling request provided.'}\n\n"
+            f"Model output:\n{model_output}\n\n"
+            f"MCP activity:\n{format_mcp_activity(mcp_activity)}"
+        )
+
+        return {
+            "response": response,
+            "agent": self.AGENT_NAME,
+            "model": self.MODEL_NAME,
+            "framework": self.FRAMEWORK_NAME,
+            "mcp_activity": mcp_activity,
+        }
+
+
+scheduling_agent = SchedulingAgent()

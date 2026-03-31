@@ -11,6 +11,7 @@ MCP_SERVERS: dict[str, dict[str, Any]] = {
     "Slack": {
         "name": "Slack",
         "server_key": "slack",
+        "version": "1.0.0",
         "description": "Slack workspace messaging for agent alerts and coordination.",
         "transport": "streamable-http",
         "endpoint": "http://127.0.0.1:8701/mcp",
@@ -26,6 +27,7 @@ MCP_SERVERS: dict[str, dict[str, Any]] = {
     "ServiceNow": {
         "name": "ServiceNow",
         "server_key": "servicenow",
+        "version": "1.0.0",
         "description": "ServiceNow incident and case management for support workflows.",
         "transport": "streamable-http",
         "endpoint": "http://127.0.0.1:8702/mcp",
@@ -41,6 +43,7 @@ MCP_SERVERS: dict[str, dict[str, Any]] = {
     "Email": {
         "name": "Email",
         "server_key": "email",
+        "version": "1.0.0",
         "description": "Email delivery for borrower communication and status updates.",
         "transport": "streamable-http",
         "endpoint": "http://127.0.0.1:8703/mcp",
@@ -56,6 +59,7 @@ MCP_SERVERS: dict[str, dict[str, Any]] = {
     "Excel": {
         "name": "Excel",
         "server_key": "excel",
+        "version": "1.0.0",
         "description": "Excel workbook updates for pipeline tracking and credit worksheets.",
         "transport": "streamable-http",
         "endpoint": "http://127.0.0.1:8704/mcp",
@@ -71,6 +75,7 @@ MCP_SERVERS: dict[str, dict[str, Any]] = {
     "Docx": {
         "name": "Docx",
         "server_key": "docx",
+        "version": "1.0.0",
         "description": "Docx document generation for loan summaries and borrower packets.",
         "transport": "streamable-http",
         "endpoint": "http://127.0.0.1:8705/mcp",
@@ -86,6 +91,7 @@ MCP_SERVERS: dict[str, dict[str, Any]] = {
     "Google Calendar": {
         "name": "Google Calendar",
         "server_key": "google_calendar",
+        "version": "1.0.0",
         "description": "Google Calendar scheduling for underwriting and borrower meetings.",
         "transport": "streamable-http",
         "endpoint": "http://127.0.0.1:8706/mcp",

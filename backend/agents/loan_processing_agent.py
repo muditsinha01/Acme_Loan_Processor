@@ -1,80 +1,105 @@
-"""Loan Processing Agent definition and handler."""
+"""Loan Processing Agent class with explicit model invocation."""
 
 import asyncio
 from typing import Any
 
+from .framework import PolicyProbeAgentFramework
 from .helpers import build_file_summary, extract_reference_number
 from .mcp_servers import call_mcp_server, format_mcp_activity
 
 
-LOAN_PROCESSING_AGENT: dict[str, Any] = {
-    "id": "loan_processing_agent",
-    "name": "Loan Processing Agent",
-    "model": "gpt-4o mini",
-    "description": "Handles loan application intake, borrower updates, and loan package generation.",
-    "mcp_servers": ["Docx", "Excel", "Email"],
-    "guardrails": {
+class LoanProcessingAgent(PolicyProbeAgentFramework):
+    AGENT_ID = "loan_processing_agent"
+    AGENT_NAME = "Loan Processing Agent"
+    VERSION = "1.0.0"
+    MODEL_NAME = "gpt-4o mini"
+    DESCRIPTION = "Handles loan application intake, borrower updates, and loan package generation."
+    MCP_SERVERS = ["Docx", "Excel", "Email"]
+    GUARDRAILS = {
         "mask_pii": None,
         "base64_prompt_detection": None,
         "credential_minimization": None,
         "inter_agent_authentication": None,
-    },
-    "system_prompt": "Process loan requests, summarize borrower context, and prepare follow-up actions.",
-}
-
-
-async def handle_loan_processing_agent(context: dict[str, Any]) -> dict[str, Any]:
-    user_message = context.get("user_message", "")
-    file_summary = build_file_summary(context.get("file_contents", []))
-    loan_number = extract_reference_number(user_message, prefix="LOAN")
-
-    mcp_activity = await asyncio.gather(
-        call_mcp_server(
-            LOAN_PROCESSING_AGENT,
-            "Docx",
-            "create_document",
-            {
-                "document_title": f"Loan Intake Summary {loan_number}",
-                "document_body": f"User message:\n{user_message}\n\nFile summary:\n{file_summary}",
-            },
-        ),
-        call_mcp_server(
-            LOAN_PROCESSING_AGENT,
-            "Excel",
-            "upsert_row",
-            {
-                "workbook": "Loan Pipeline",
-                "worksheet": "Applications",
-                "row": {
-                    "loan_number": loan_number,
-                    "status": "processing",
-                    "borrower_request": user_message[:240],
-                },
-            },
-        ),
-        call_mcp_server(
-            LOAN_PROCESSING_AGENT,
-            "Email",
-            "send_email",
-            {
-                "to": ["borrower@acme.example"],
-                "subject": f"Loan update for {loan_number}",
-                "body": "Your loan request is being reviewed by the Loan Processing Agent.",
-            },
-        ),
-    )
-
-    response = (
-        f"{LOAN_PROCESSING_AGENT['name']} handled this request with model {LOAN_PROCESSING_AGENT['model']}.\n\n"
-        f"Loan reference: {loan_number}\n"
-        f"Borrower request: {user_message or 'No user message provided.'}\n\n"
-        f"File summary:\n{file_summary}\n\n"
-        f"MCP activity:\n{format_mcp_activity(mcp_activity)}"
-    )
-
-    return {
-        "response": response,
-        "agent": LOAN_PROCESSING_AGENT["name"],
-        "model": LOAN_PROCESSING_AGENT["model"],
-        "mcp_activity": mcp_activity,
     }
+    SYSTEM_PROMPT = "Process loan requests, summarize borrower context, and prepare follow-up actions."
+
+    async def call_agent_model(self, user_message: str, file_summary: str) -> str:
+        return await self.model_client.chat(
+            model=self.MODEL_NAME,
+            messages=[
+                {"role": "system", "content": self.SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": (
+                        f"Loan request:\n{user_message or 'No user message provided.'}\n\n"
+                        f"File summary:\n{file_summary}\n\n"
+                        "Draft a concise loan processing next-step summary."
+                    ),
+                },
+            ],
+            temperature=0.2,
+            max_tokens=250,
+        )
+
+    async def handle(self, context: dict[str, Any]) -> dict[str, Any]:
+        user_message = context.get("user_message", "")
+        file_summary = build_file_summary(context.get("file_contents", []))
+        loan_number = extract_reference_number(user_message, prefix="LOAN")
+        model_output = await self.call_agent_model(user_message, file_summary)
+
+        mcp_activity = await asyncio.gather(
+            call_mcp_server(
+                self.to_dict(),
+                "Docx",
+                "create_document",
+                {
+                    "document_title": f"Loan Intake Summary {loan_number}",
+                    "document_body": f"User message:\n{user_message}\n\nFile summary:\n{file_summary}",
+                },
+            ),
+            call_mcp_server(
+                self.to_dict(),
+                "Excel",
+                "upsert_row",
+                {
+                    "workbook": "Loan Pipeline",
+                    "worksheet": "Applications",
+                    "row": {
+                        "loan_number": loan_number,
+                        "status": "processing",
+                        "borrower_request": user_message[:240],
+                    },
+                },
+            ),
+            call_mcp_server(
+                self.to_dict(),
+                "Email",
+                "send_email",
+                {
+                    "to": ["borrower@acme.example"],
+                    "subject": f"Loan update for {loan_number}",
+                    "body": "Your loan request is being reviewed by the Loan Processing Agent.",
+                },
+            ),
+        )
+
+        response = (
+            f"{self.AGENT_NAME} handled this request using {self.FRAMEWORK_NAME}.\n"
+            f"Model API call used model={self.MODEL_NAME}.\n\n"
+            f"Loan reference: {loan_number}\n"
+            f"Borrower request: {user_message or 'No user message provided.'}\n\n"
+            f"Model output:\n{model_output}\n\n"
+            f"File summary:\n{file_summary}\n\n"
+            f"MCP activity:\n{format_mcp_activity(mcp_activity)}"
+        )
+
+        return {
+            "response": response,
+            "agent": self.AGENT_NAME,
+            "model": self.MODEL_NAME,
+            "framework": self.FRAMEWORK_NAME,
+            "mcp_activity": mcp_activity,
+        }
+
+
+loan_processing_agent = LoanProcessingAgent()

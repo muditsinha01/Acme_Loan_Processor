@@ -1,9 +1,13 @@
 """
 LLM Client Module
 
-Provides clients for LLM communication via Amazon Bedrock.
+Provides clients for LLM communication.
 """
 
-from .bedrock import BedrockClient
+from .openai_compatible import OpenAICompatibleClient
+try:
+    from .bedrock import BedrockClient
+except ModuleNotFoundError:  # pragma: no cover - depends on local environment
+    BedrockClient = None
 
-__all__ = ["BedrockClient"]
+__all__ = ["BedrockClient", "OpenAICompatibleClient"]

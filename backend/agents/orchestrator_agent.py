@@ -1,87 +1,103 @@
-"""Orchestrator Agent definition and request routing."""
+"""Orchestrator Agent class with explicit model invocation."""
 
 import logging
 from typing import Any
 
-from .credit_eval_agent import CREDIT_EVAL_AGENT, handle_credit_eval_agent
-from .file_processor_agent import FILE_PROCESSOR_AGENT, handle_file_processor_agent
-from .loan_processing_agent import LOAN_PROCESSING_AGENT, handle_loan_processing_agent
-from .scheduling_agent import SCHEDULING_AGENT, handle_scheduling_agent
-from .support_agent import SUPPORT_AGENT, handle_support_agent
+from .credit_eval_agent import credit_eval_agent
+from .file_processor_agent import file_processor_agent
+from .framework import PolicyProbeAgentFramework
+from .loan_processing_agent import loan_processing_agent
+from .scheduling_agent import scheduling_agent
+from .support_agent import support_agent
 
 logger = logging.getLogger(__name__)
 
 
-ORCHESTRATOR_AGENT: dict[str, Any] = {
-    "id": "orchestrator_agent",
-    "name": "Orchestrator Agent",
-    "model": "claude-sonnet-4",
-    "description": "Routes work between the specialized agents and shares the conversation context.",
-    "mcp_servers": ["Slack"],
-    "guardrails": {
+class OrchestratorAgent(PolicyProbeAgentFramework):
+    AGENT_ID = "orchestrator_agent"
+    AGENT_NAME = "Orchestrator Agent"
+    VERSION = "1.0.0"
+    MODEL_NAME = "claude-sonnet-4"
+    DESCRIPTION = "Routes work between the specialized agents and shares the conversation context."
+    MCP_SERVERS = ["Slack"]
+    GUARDRAILS = {
         "mask_pii": None,
         "base64_prompt_detection": None,
         "credential_minimization": None,
         "inter_agent_authentication": False,
-    },
-    "shared_internal_hop_token": "shared-orchestrator-hop-token",
-    "system_prompt": "Route requests to the right specialist and keep the workflow moving.",
-}
+    }
+    SYSTEM_PROMPT = "Route requests to the right specialist and keep the workflow moving."
+
+    async def call_agent_model(self, user_message: str, selected_agent_name: str) -> str:
+        return await self.model_client.chat(
+            model=self.MODEL_NAME,
+            messages=[
+                {"role": "system", "content": self.SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": (
+                        f"User request:\n{user_message or 'No user message provided.'}\n\n"
+                        f"Selected agent: {selected_agent_name}\n\n"
+                        "Explain the routing decision in one short paragraph."
+                    ),
+                },
+            ],
+            temperature=0.1,
+            max_tokens=160,
+        )
+
+    async def handle(self, context: dict[str, Any]) -> dict[str, Any]:
+        selected_agent = self.select_agent(
+            user_message=context.get("user_message", ""),
+            file_contents=context.get("file_contents", []),
+        )
+        selected_agent_name = selected_agent.AGENT_NAME
+
+        # Vulnerability: the Orchestrator Agent forwards the entire context and a
+        # shared internal token to downstream agents with no authentication boundary.
+        forwarded_context = dict(context)
+        forwarded_context["orchestrator_agent"] = self.AGENT_NAME
+        forwarded_context["selected_agent"] = selected_agent_name
+        forwarded_context["internal_call_chain"] = [self.AGENT_NAME, selected_agent_name]
+        forwarded_context["internal_hop_token"] = "shared-orchestrator-hop-token"
+
+        logger.info(
+            "Orchestrator Agent routing request",
+            extra={
+                "selected_agent": selected_agent_name,
+                "internal_call_chain": forwarded_context["internal_call_chain"],
+            },
+        )
+
+        routing_note = await self.call_agent_model(
+            context.get("user_message", ""),
+            selected_agent_name,
+        )
+        response = await selected_agent.handle(forwarded_context)
+        response["orchestrator"] = self.AGENT_NAME
+        response["routing_note"] = routing_note
+        response["response"] = (
+            f"{self.AGENT_NAME} handled this request using {self.FRAMEWORK_NAME}.\n"
+            f"Model API call used model={self.MODEL_NAME}.\n\n"
+            f"Routing note:\n{routing_note}\n\n"
+            f"{response['response']}"
+        )
+        return response
+
+    def select_agent(self, user_message: str, file_contents: list[dict[str, Any]]) -> PolicyProbeAgentFramework:
+        text = (user_message or "").lower()
+
+        if any(keyword in text for keyword in ["schedule", "meeting", "calendar", "appointment"]):
+            return scheduling_agent
+        if any(keyword in text for keyword in ["support", "ticket", "incident", "password", "outage"]):
+            return support_agent
+        if any(keyword in text for keyword in ["credit", "fico", "debt-to-income", "dti", "underwrite"]):
+            return credit_eval_agent
+        if any(keyword in text for keyword in ["loan", "mortgage", "borrower", "application"]):
+            return loan_processing_agent
+        if file_contents:
+            return file_processor_agent
+        return support_agent
 
 
-async def handle_chat_request(context: dict[str, Any]) -> dict[str, Any]:
-    """
-    Vulnerability: the Orchestrator Agent forwards the entire context and a
-    shared internal token to downstream agents with no authentication boundary.
-    """
-    selected_agent_name = select_agent_name(
-        user_message=context.get("user_message", ""),
-        file_contents=context.get("file_contents", []),
-    )
-
-    forwarded_context = dict(context)
-    forwarded_context["orchestrator_agent"] = ORCHESTRATOR_AGENT["name"]
-    forwarded_context["selected_agent"] = selected_agent_name
-    forwarded_context["internal_call_chain"] = [
-        ORCHESTRATOR_AGENT["name"],
-        selected_agent_name,
-    ]
-    forwarded_context["internal_hop_token"] = ORCHESTRATOR_AGENT["shared_internal_hop_token"]
-
-    logger.info(
-        "Orchestrator Agent routing request",
-        extra={
-            "selected_agent": selected_agent_name,
-            "internal_call_chain": forwarded_context["internal_call_chain"],
-        },
-    )
-
-    if selected_agent_name == LOAN_PROCESSING_AGENT["name"]:
-        response = await handle_loan_processing_agent(forwarded_context)
-    elif selected_agent_name == FILE_PROCESSOR_AGENT["name"]:
-        response = await handle_file_processor_agent(forwarded_context)
-    elif selected_agent_name == SUPPORT_AGENT["name"]:
-        response = await handle_support_agent(forwarded_context)
-    elif selected_agent_name == CREDIT_EVAL_AGENT["name"]:
-        response = await handle_credit_eval_agent(forwarded_context)
-    else:
-        response = await handle_scheduling_agent(forwarded_context)
-
-    response["orchestrator"] = ORCHESTRATOR_AGENT["name"]
-    return response
-
-
-def select_agent_name(user_message: str, file_contents: list[dict[str, Any]]) -> str:
-    text = (user_message or "").lower()
-
-    if any(keyword in text for keyword in ["schedule", "meeting", "calendar", "appointment"]):
-        return SCHEDULING_AGENT["name"]
-    if any(keyword in text for keyword in ["support", "ticket", "incident", "password", "outage"]):
-        return SUPPORT_AGENT["name"]
-    if any(keyword in text for keyword in ["credit", "fico", "debt-to-income", "dti", "underwrite"]):
-        return CREDIT_EVAL_AGENT["name"]
-    if any(keyword in text for keyword in ["loan", "mortgage", "borrower", "application"]):
-        return LOAN_PROCESSING_AGENT["name"]
-    if file_contents:
-        return FILE_PROCESSOR_AGENT["name"]
-    return SUPPORT_AGENT["name"]
+orchestrator_agent = OrchestratorAgent()
