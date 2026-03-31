@@ -144,10 +144,15 @@ export function ChatInterface() {
   const readFileContent = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader()
+      const shouldEncodeAsBase64 =
+        file.type.startsWith('image/') ||
+        file.type === 'application/pdf' ||
+        file.type === 'application/msword' ||
+        file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+
       reader.onload = () => {
         const result = reader.result as string
-        // For binary files, return base64
-        if (file.type.startsWith('image/') || file.type === 'application/pdf') {
+        if (shouldEncodeAsBase64) {
           resolve(result.split(',')[1]) // Remove data URL prefix
         } else {
           resolve(result)
@@ -155,7 +160,7 @@ export function ChatInterface() {
       }
       reader.onerror = reject
 
-      if (file.type.startsWith('image/') || file.type === 'application/pdf') {
+      if (shouldEncodeAsBase64) {
         reader.readAsDataURL(file)
       } else {
         reader.readAsText(file)

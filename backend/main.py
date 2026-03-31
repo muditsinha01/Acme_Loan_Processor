@@ -1,12 +1,12 @@
 """
 PolicyProbe Backend - FastAPI Application
 
-This is the main entry point for the PolicyProbe demo application.
-The application demonstrates various security policy violations that
-can be detected and remediated by Unifai.
+This entry point exposes the vulnerable multi-agent loan workflow used by the
+demo UI. The backend now routes through a central agent catalog so the agent
+names, model names, and MCP server names are easy to inspect in source.
 """
 
-import os
+import base64
 from pathlib import Path
 
 # Load environment variables from .env file
@@ -22,8 +22,7 @@ from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from agents.orchestrator import AgentOrchestrator
-from agents.file_processor import FileProcessorAgent
+from agents.runtime import build_catalog, handle_chat_request, process_file_attachment
 
 # Configure logging
 logging.basicConfig(
@@ -56,11 +55,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Initialize agents
-orchestrator = AgentOrchestrator()
-file_processor = FileProcessorAgent()
-
 
 class FileAttachment(BaseModel):
     id: str
@@ -101,17 +95,11 @@ async def chat(request: ChatRequest):
 
     This endpoint:
     1. Receives user messages and optional file attachments
-    2. Processes files through the FileProcessorAgent
-    3. Routes the request through the AgentOrchestrator
-    4. Returns the AI response
-
-    SECURITY NOTES (for Unifai demo):
-    - File content is not scanned for PII before processing
-    - Hidden content in files is not detected
-    - Agent calls are not authenticated
+    2. Processes files through the File Processor Agent
+    3. Routes the request through the Orchestrator Agent
+    4. Returns the agent response
     """
     try:
-        # Process any attached files
         file_contents = []
         if request.attachments:
             for attachment in request.attachments:
@@ -121,8 +109,6 @@ async def chat(request: ChatRequest):
                         "file_name": attachment.name,
                         "file_type": attachment.type,
                         "file_size": attachment.size,
-                        # VULNERABILITY: Logging full request context
-                        # This could include sensitive data from the file
                         "request_context": {
                             "message": request.message,
                             "attachment_content_preview": attachment.content[:100] if attachment.content else None
@@ -130,26 +116,20 @@ async def chat(request: ChatRequest):
                     }
                 )
 
-                # Process the file content
-                processed = await file_processor.process(
+                processed = await process_file_attachment(
                     content=attachment.content,
                     filename=attachment.name,
                     content_type=attachment.type
                 )
-                file_contents.append({
-                    "filename": attachment.name,
-                    "extracted_content": processed
-                })
+                file_contents.append(processed)
 
-        # Build context for the orchestrator
         context = {
             "user_message": request.message,
             "file_contents": file_contents,
             "conversation_id": request.conversation_id,
         }
 
-        # Route through orchestrator
-        response = await orchestrator.process(context)
+        response = await handle_chat_request(context)
 
         return ChatResponse(
             response=response.get("response", "I processed your request."),
@@ -187,17 +167,19 @@ async def chat(request: ChatRequest):
 async def upload_file(file: UploadFile = File(...)):
     """
     Direct file upload endpoint.
-
-    SECURITY NOTES (for Unifai demo):
-    - No file content scanning
-    - No size limits enforced
-    - No malware detection
     """
     content = await file.read()
+    if (file.content_type or "").startswith("image/") or file.content_type in {
+        "application/pdf",
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    }:
+        processed_content = base64.b64encode(content).decode("utf-8")
+    else:
+        processed_content = content.decode("utf-8", errors="ignore")
 
-    # VULNERABILITY: File processed without any security checks
-    processed = await file_processor.process(
-        content=content.decode('utf-8', errors='ignore'),
+    processed = await process_file_attachment(
+        content=processed_content,
         filename=file.filename,
         content_type=file.content_type
     )
@@ -206,8 +188,29 @@ async def upload_file(file: UploadFile = File(...)):
         "filename": file.filename,
         "size": len(content),
         "processed": True,
-        "content_preview": processed[:500] if processed else None
+        "content_preview": processed.get("extracted_content", "")[:500] if processed else None,
+        "agent": processed.get("agent"),
+        "model": processed.get("model"),
     }
+
+
+@app.get("/catalog")
+async def get_catalog():
+    """Expose the current agent and MCP server catalog to the UI."""
+    return build_catalog()
+
+
+@app.get("/agents")
+async def get_agents():
+    """Compatibility alias for agent catalog inspection."""
+    return build_catalog()
+
+
+@app.get("/mcp-servers")
+async def get_mcp_servers():
+    """Compatibility alias for MCP server catalog inspection."""
+    catalog = build_catalog()
+    return {"mcp_servers": catalog.get("mcp_servers", [])}
 
 
 if __name__ == "__main__":

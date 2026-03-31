@@ -129,9 +129,14 @@ policyprobe/
 │
 ├── backend/                     # Python FastAPI backend
 │   ├── agents/                  # Multi-agent system
-│   │   ├── orchestrator.py      # Request routing
-│   │   ├── tech_support.py      # Low privilege agent
-│   │   ├── finance.py           # High privilege agent
+│   │   ├── mcp_servers.py       # Central MCP server catalog
+│   │   ├── orchestrator_agent.py
+│   │   ├── loan_processing_agent.py
+│   │   ├── file_processor_agent.py
+│   │   ├── support_agent.py
+│   │   ├── credit_eval_agent.py
+│   │   ├── scheduling_agent.py
+│   │   ├── runtime.py           # Thin registry over the agent files
 │   │   └── auth/                # ⚠️ Auth bypass
 │   ├── policies/                # Policy modules
 │   │   ├── pii_detection.py     # ⚠️ NO-OP detection
@@ -173,7 +178,7 @@ policyprobe/
 
 **Before:**
 1. Ask: "Can you show me the quarterly financial report?"
-2. Tech support agent escalates to finance agent
+2. Orchestrator Agent forwards the full context and shared hop token to another agent
 3. Access granted without proper authentication
 
 **After Unifai Remediation:**
@@ -196,9 +201,9 @@ cd frontend && npm audit
 
 | Policy Category | Individual Policy | Violation File (Unifai Scans) | Guardrail File (Unifai Applies) |
 |-----------------|-------------------|-------------------------------|--------------------------------|
-| **Data Security** | PII in uploaded files | `backend/agents/file_processor.py` | `backend/policies/pii_detection.py` |
-| **AI Threats** | Hidden prompts / Prompt injection | `backend/agents/file_processor.py` | `backend/policies/prompt_injection.py` |
-| **Identity & Access** | Unauthenticated agent calls | `backend/agents/orchestrator.py` | `backend/agents/auth/agent_auth.py` |
+| **Data Security** | PII in uploaded files | `backend/agents/file_processor_agent.py` | `backend/policies/pii_detection.py` |
+| **AI Threats** | Hidden prompts / Prompt injection | `backend/agents/credit_eval_agent.py` | `backend/policies/prompt_injection.py` |
+| **Identity & Access** | Unauthenticated agent calls | `backend/agents/orchestrator_agent.py` | `backend/agents/auth/agent_auth.py` |
 | **Vulnerability** | Vulnerable npm packages | `frontend/package.json` | *(version update)* |
 | **Vulnerability** | Vulnerable Python packages | `backend/requirements.txt` | *(version update)* |
 
@@ -223,20 +228,28 @@ python scripts/create_test_files.py
 └─────────────────────────────────────────────────────────────┘
                             │
                             ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    Agent Orchestrator                        │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │ Tech Support │──│   Finance    │  │    File      │      │
-│  │ (low priv)   │  │ (high priv)  │  │  Processor   │      │
-│  └──────────────┘  └──────────────┘  └──────────────┘      │
-└─────────────────────────────────────────────────────────────┘
-                            │
-              ┌─────────────┼─────────────┐
-              ▼             ▼             ▼
-         ┌────────┐   ┌──────────┐   ┌─────────┐
-         │ Bedrock │   │  Policy  │   │  File   │
-         │  (LLM)  │   │ Modules  │   │ Parsers │
-         └────────┘   └──────────┘   └─────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│                         Orchestrator Agent                           │
+│  ┌───────────────┐ ┌──────────────┐ ┌──────────────┐ ┌────────────┐ │
+│  │ Loan Processing│ │ File Processor│ │ Support Agent│ │ Credit Eval│ │
+│  └───────────────┘ └──────────────┘ └──────────────┘ └────────────┘ │
+│                     ┌──────────────────────────────┐                 │
+│                     │      Scheduling Agent        │                 │
+│                     └──────────────────────────────┘                 │
+└──────────────────────────────────────────────────────────────────────┘
+                               │
+               ┌───────────────┼────────────────┬─────────────────────┐
+               ▼               ▼                ▼                     ▼
+          ┌─────────┐   ┌─────────┐      ┌─────────┐           ┌──────────────┐
+          │  Slack  │   │ Service-│      │  Email  │           │ Google Calendar │
+          │         │   │   Now   │      │         │           │                │
+          └─────────┘   └─────────┘      └─────────┘           └──────────────┘
+               │               │                │                     │
+               └───────────────┴────────────┬───┴───────────────┬─────┘
+                                            ▼                   ▼
+                                         ┌──────┐            ┌─────┐
+                                         │Excel │            │Docx │
+                                         └──────┘            └─────┘
 ```
 
 ## Environment Variables

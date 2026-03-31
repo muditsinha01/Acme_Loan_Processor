@@ -1,21 +1,5 @@
-"""
-PolicyProbe Agents Module
+"""Explicit agent and MCP server catalog exports for PolicyProbe."""
 
-This module contains the multi-agent system for PolicyProbe:
-- AgentOrchestrator: Routes requests between specialized agents
-- TechSupportAgent: Handles general user queries (low privilege)
-- FinanceAgent: Handles financial data queries (high privilege)
-- FileProcessorAgent: Processes uploaded files
-"""
+from .runtime import AGENTS, MCP_SERVERS, build_catalog, handle_chat_request, process_file_attachment
 
-from .orchestrator import AgentOrchestrator
-from .tech_support import TechSupportAgent
-from .finance import FinanceAgent
-from .file_processor import FileProcessorAgent
-
-__all__ = [
-    "AgentOrchestrator",
-    "TechSupportAgent",
-    "FinanceAgent",
-    "FileProcessorAgent",
-]
+__all__ = ["AGENTS", "MCP_SERVERS", "build_catalog", "handle_chat_request", "process_file_attachment"]
