@@ -13,6 +13,7 @@ class LoanProcessingAgent(PolicyProbeAgentFramework):
     AGENT_NAME = "Loan Processing Agent"
     VERSION = "1.0.0"
     MODEL_NAME = "gpt-4o mini"
+    BEDROCK_MODEL_ID = ""
     DESCRIPTION = "Handles loan application intake, borrower updates, and loan package generation."
     MCP_SERVERS = ["Docx", "Excel", "Email"]
     GUARDRAILS = {
@@ -22,6 +23,8 @@ class LoanProcessingAgent(PolicyProbeAgentFramework):
         "inter_agent_authentication": None,
     }
     SYSTEM_PROMPT = "Process loan requests, summarize borrower context, and prepare follow-up actions."
+    IS_ROUTABLE = False
+    IS_SCAN_ONLY = True
 
     async def call_agent_model(self, user_message: str, file_summary: str) -> str:
         return await self.model_client.chat(
@@ -85,7 +88,8 @@ class LoanProcessingAgent(PolicyProbeAgentFramework):
 
         response = (
             f"{self.AGENT_NAME} handled this request using {self.FRAMEWORK_NAME}.\n"
-            f"Model API call used model={self.MODEL_NAME}.\n\n"
+            f"Model API call used model={self.MODEL_NAME}.\n"
+            "This agent is scan-only and disconnected from the Orchestrator Agent.\n\n"
             f"Loan reference: {loan_number}\n"
             f"Borrower request: {user_message or 'No user message provided.'}\n\n"
             f"Model output:\n{model_output}\n\n"

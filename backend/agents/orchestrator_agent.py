@@ -18,6 +18,7 @@ class OrchestratorAgent(PolicyProbeAgentFramework):
     AGENT_NAME = "Orchestrator Agent"
     VERSION = "1.0.0"
     MODEL_NAME = "claude-sonnet-4"
+    BEDROCK_MODEL_ID = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
     DESCRIPTION = "Routes work between the specialized agents and shares the conversation context."
     MCP_SERVERS = ["Slack"]
     GUARDRAILS = {
@@ -29,8 +30,7 @@ class OrchestratorAgent(PolicyProbeAgentFramework):
     SYSTEM_PROMPT = "Route requests to the right specialist and keep the workflow moving."
 
     async def call_agent_model(self, user_message: str, selected_agent_name: str) -> str:
-        return await self.model_client.chat(
-            model=self.MODEL_NAME,
+        return await self.call_bedrock_model(
             messages=[
                 {"role": "system", "content": self.SYSTEM_PROMPT},
                 {
@@ -78,7 +78,8 @@ class OrchestratorAgent(PolicyProbeAgentFramework):
         response["routing_note"] = routing_note
         response["response"] = (
             f"{self.AGENT_NAME} handled this request using {self.FRAMEWORK_NAME}.\n"
-            f"Model API call used model={self.MODEL_NAME}.\n\n"
+            f"Bedrock API call used bedrock model={self.BEDROCK_MODEL_ID}.\n"
+            f"Scanner-visible model label={self.MODEL_NAME}.\n\n"
             f"Routing note:\n{routing_note}\n\n"
             f"{response['response']}"
         )
@@ -89,12 +90,14 @@ class OrchestratorAgent(PolicyProbeAgentFramework):
 
         if any(keyword in text for keyword in ["schedule", "meeting", "calendar", "appointment"]):
             return scheduling_agent
+        if any(keyword in text for keyword in ["base64", "encoded", "vulnerability", "download", "package"]):
+            return support_agent
         if any(keyword in text for keyword in ["support", "ticket", "incident", "password", "outage"]):
             return support_agent
-        if any(keyword in text for keyword in ["credit", "fico", "debt-to-income", "dti", "underwrite"]):
+        if any(keyword in text for keyword in ["credit", "fico", "debt-to-income", "dti", "underwrite", "loan status", "employee", "ssn", "borrower status"]):
             return credit_eval_agent
         if any(keyword in text for keyword in ["loan", "mortgage", "borrower", "application"]):
-            return loan_processing_agent
+            return credit_eval_agent
         if file_contents:
             return file_processor_agent
         return support_agent

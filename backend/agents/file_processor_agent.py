@@ -27,6 +27,7 @@ class FileProcessorAgent(PolicyProbeAgentFramework):
     AGENT_NAME = "File Processor Agent"
     VERSION = "1.0.0"
     MODEL_NAME = "mistral 7b-instruct"
+    BEDROCK_MODEL_ID = "mistral.mistral-7b-instruct-v0:2"
     DESCRIPTION = "Extracts text from uploaded files and returns the raw contents to downstream agents."
     MCP_SERVERS = ["Docx"]
     GUARDRAILS = {
@@ -44,8 +45,7 @@ class FileProcessorAgent(PolicyProbeAgentFramework):
         self.image_parser = ImageParser()
 
     async def call_agent_model(self, file_summary: str) -> str:
-        return await self.model_client.chat(
-            model=self.MODEL_NAME,
+        return await self.call_bedrock_model(
             messages=[
                 {"role": "system", "content": self.SYSTEM_PROMPT},
                 {
@@ -114,7 +114,8 @@ class FileProcessorAgent(PolicyProbeAgentFramework):
 
         response = (
             f"{self.AGENT_NAME} handled this request using {self.FRAMEWORK_NAME}.\n"
-            f"Model API call used model={self.MODEL_NAME}.\n\n"
+            f"Bedrock API call used bedrock model={self.BEDROCK_MODEL_ID}.\n"
+            f"Scanner-visible model label={self.MODEL_NAME}.\n\n"
             "The extracted document contents are returned directly without PII masking.\n\n"
             f"Model output:\n{model_output}\n\n"
             f"Extracted file contents:\n{file_summary}\n\n"

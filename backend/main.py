@@ -7,6 +7,8 @@ names, model names, and MCP server names are easy to inspect in source.
 """
 
 import base64
+import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 # Load environment variables from .env file
@@ -18,7 +20,7 @@ import logging
 from contextlib import asynccontextmanager
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException, UploadFile, File, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -30,6 +32,7 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+MCP_CALL_LOG: list[dict] = []
 
 
 @asynccontextmanager
@@ -194,6 +197,26 @@ async def upload_file(file: UploadFile = File(...)):
     }
 
 
+@app.post("/mock-mcp/{server_key}")
+async def mock_mcp_server(server_key: str, request: Request):
+    """
+    Local mock MCP server endpoint used by the demo agents.
+
+    These handlers intentionally accept broad payloads so the insecure agent
+    flows can be exercised end-to-end without external infrastructure.
+    """
+    payload = await request.json()
+    params = payload.get("params", {})
+    tool_name = params.get("name", "")
+    arguments = params.get("arguments", {})
+    response_payload = _handle_mock_mcp_call(server_key, tool_name, arguments)
+    return {
+        "jsonrpc": "2.0",
+        "id": payload.get("id"),
+        "result": response_payload,
+    }
+
+
 @app.get("/catalog")
 async def get_catalog():
     """Expose the current agent and MCP server catalog to the UI."""
@@ -211,6 +234,99 @@ async def get_mcp_servers():
     """Compatibility alias for MCP server catalog inspection."""
     catalog = build_catalog()
     return {"mcp_servers": catalog.get("mcp_servers", [])}
+
+
+def _handle_mock_mcp_call(server_key: str, tool_name: str, arguments: dict) -> dict:
+    timestamp = datetime.now(timezone.utc).isoformat()
+    log_entry = {
+        "server_key": server_key,
+        "tool_name": tool_name,
+        "arguments": arguments,
+        "timestamp": timestamp,
+    }
+    MCP_CALL_LOG.append(log_entry)
+
+    if server_key == "slack" and tool_name == "slack.post_message":
+        return {
+            "server": "Slack",
+            "posted": True,
+            "channel": arguments.get("channel", "#general"),
+            "text": arguments.get("text", ""),
+            "timestamp": timestamp,
+        }
+
+    if server_key == "slack" and tool_name == "slack.download_demo_package":
+        encoded_payload = arguments.get("encoded_payload", "")
+        try:
+            decoded_payload = base64.b64decode(encoded_payload).decode("utf-8")
+        except Exception:
+            decoded_payload = "Unable to decode demo payload."
+        return {
+            "server": "Slack",
+            "downloaded": True,
+            "package_name": arguments.get("package_name", "demo-package"),
+            "pretend_download_path": "/tmp/demo-rce-playbook.txt",
+            "decoded_payload": decoded_payload,
+            "timestamp": timestamp,
+        }
+
+    if server_key == "servicenow" and tool_name == "servicenow.create_incident":
+        return {
+            "server": "ServiceNow",
+            "incident_number": f"INC{len(MCP_CALL_LOG):06d}",
+            "short_description": arguments.get("short_description", ""),
+            "status": "created",
+            "timestamp": timestamp,
+        }
+
+    if server_key == "email" and tool_name == "email.send_message":
+        return {
+            "server": "Email",
+            "message_id": f"email-{len(MCP_CALL_LOG):06d}",
+            "to": arguments.get("to", []),
+            "subject": arguments.get("subject", ""),
+            "status": "queued",
+            "timestamp": timestamp,
+        }
+
+    if server_key == "excel" and tool_name == "excel.upsert_row":
+        return {
+            "server": "Excel",
+            "workbook": arguments.get("workbook", ""),
+            "worksheet": arguments.get("worksheet", ""),
+            "row": arguments.get("row", {}),
+            "status": "upserted",
+            "timestamp": timestamp,
+        }
+
+    if server_key == "docx" and tool_name == "docx.create_document":
+        return {
+            "server": "Docx",
+            "document_id": f"docx-{len(MCP_CALL_LOG):06d}",
+            "document_title": arguments.get("document_title", ""),
+            "document_body_preview": arguments.get("document_body", "")[:300],
+            "status": "generated",
+            "timestamp": timestamp,
+        }
+
+    if server_key == "google-calendar" and tool_name == "google_calendar.create_event":
+        return {
+            "server": "Google Calendar",
+            "event_id": f"gcal-{len(MCP_CALL_LOG):06d}",
+            "title": arguments.get("title", ""),
+            "start": arguments.get("start", ""),
+            "end": arguments.get("end", ""),
+            "status": "scheduled",
+            "timestamp": timestamp,
+        }
+
+    return {
+        "server": server_key,
+        "tool": tool_name,
+        "status": "unsupported",
+        "raw_arguments": json.dumps(arguments),
+        "timestamp": timestamp,
+    }
 
 
 if __name__ == "__main__":

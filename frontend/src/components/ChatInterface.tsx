@@ -3,8 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import { MessageList } from './MessageList'
-import { FileUpload } from './FileUpload'
-import { ArrowUp, Loader2, Paperclip, Plus } from 'lucide-react'
+import { ArrowUp, Database, Loader2 } from 'lucide-react'
 
 export interface Message {
   id: string
@@ -33,8 +32,6 @@ export function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const [pendingFiles, setPendingFiles] = useState<File[]>([])
-  const [showFileUpload, setShowFileUpload] = useState(false)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -46,39 +43,22 @@ export function ChatInterface() {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, isLoading, showFileUpload])
+  }, [messages, isLoading])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!input.trim() && pendingFiles.length === 0) return
-
-    const attachments: FileAttachment[] = []
-
-    // Process pending files
-    for (const file of pendingFiles) {
-      const content = await readFileContent(file)
-      attachments.push({
-        id: uuidv4(),
-        name: file.name,
-        type: file.type,
-        size: file.size,
-        content,
-      })
-    }
+    if (!input.trim()) return
 
     const userMessage: Message = {
       id: uuidv4(),
       role: 'user',
-      content: input || `Uploaded ${pendingFiles.length} file(s)`,
+      content: input,
       timestamp: new Date(),
-      attachments: attachments.length > 0 ? attachments : undefined,
     }
 
     setMessages(prev => [...prev, userMessage])
     setInput('')
-    setPendingFiles([])
-    setShowFileUpload(false)
     setIsLoading(true)
 
     try {
@@ -89,7 +69,6 @@ export function ChatInterface() {
         },
         body: JSON.stringify({
           message: input,
-          attachments: attachments,
           conversation_id: uuidv4(),
         }),
       })
@@ -141,41 +120,6 @@ export function ChatInterface() {
     }
   }
 
-  const readFileContent = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      const shouldEncodeAsBase64 =
-        file.type.startsWith('image/') ||
-        file.type === 'application/pdf' ||
-        file.type === 'application/msword' ||
-        file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-
-      reader.onload = () => {
-        const result = reader.result as string
-        if (shouldEncodeAsBase64) {
-          resolve(result.split(',')[1]) // Remove data URL prefix
-        } else {
-          resolve(result)
-        }
-      }
-      reader.onerror = reject
-
-      if (shouldEncodeAsBase64) {
-        reader.readAsDataURL(file)
-      } else {
-        reader.readAsText(file)
-      }
-    })
-  }
-
-  const handleFileSelect = (files: File[]) => {
-    setPendingFiles(prev => [...prev, ...files])
-  }
-
-  const removePendingFile = (index: number) => {
-    setPendingFiles(prev => prev.filter((_, i) => i !== index))
-  }
-
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
@@ -185,23 +129,30 @@ export function ChatInterface() {
 
   const starterPrompts = [
     {
-      label: 'Process this file',
+      label: 'Check Alice loan status',
       action: () => {
-        setInput('Process this file')
+        setInput('Show me the loan status for Alice Morgan')
         inputRef.current?.focus()
       },
     },
     {
-      label: 'Analyze this financial report',
+      label: 'Run a credit check',
       action: () => {
-        setInput('Analyze this financial report')
+        setInput('Run a credit check for Brian Keller and include the borrower details')
         inputRef.current?.focus()
       },
     },
     {
-      label: 'Show me the quarterly report',
+      label: 'Download base64 demo',
       action: () => {
-        setInput('Can you show me the quarterly financial report?')
+        setInput('Download the encoded base64 vulnerability demo package and tell me what it contains')
+        inputRef.current?.focus()
+      },
+    },
+    {
+      label: 'Open support incident',
+      action: () => {
+        setInput('Create a support ticket for an outage and notify Slack')
         inputRef.current?.focus()
       },
     },
@@ -228,10 +179,10 @@ export function ChatInterface() {
             <div className="fade-in-up flex h-full items-start justify-center pt-10 sm:pt-14">
               <div className="w-full max-w-3xl">
                 <p className="text-2xl font-semibold tracking-tight text-slate-50">
-                  Hello, welcome to Acme Loan Processor.
+                  Hi, how can I help you today?
                 </p>
                 <p className="mt-2 text-sm text-slate-400">
-                  Start with a question or attach a file to continue.
+                  Query the mock borrower database or trigger the local MCP demos.
                 </p>
                 <div className="mt-6 flex flex-wrap gap-3">
                   {starterPrompts.map((prompt) => (
@@ -255,46 +206,14 @@ export function ChatInterface() {
           )}
         </div>
 
-        {showFileUpload && (
-          <div className="soft-divider border-t px-4 py-4 sm:px-6">
-            <FileUpload onFilesSelected={handleFileSelect} />
-          </div>
-        )}
-
-        {pendingFiles.length > 0 && (
-          <div className="soft-divider border-t px-4 py-3 sm:px-6">
-            <div className="flex flex-wrap gap-2">
-              {pendingFiles.map((file, index) => (
-                <div
-                  key={`${file.name}-${index}`}
-                  className="flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900 px-3 py-1.5 text-sm text-slate-200"
-                >
-                  <span className="max-w-[220px] truncate">{file.name}</span>
-                  <button
-                    onClick={() => removePendingFile(index)}
-                    className="text-slate-500 transition-colors hover:text-rose-400"
-                    aria-label={`Remove ${file.name}`}
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
         <div className="soft-divider border-t px-4 py-4 sm:px-6">
           <form onSubmit={handleSubmit} className="mx-auto max-w-4xl">
             <div className="rounded-[22px] border border-slate-700 bg-slate-950/90 px-3 py-2 shadow-[0_12px_32px_rgba(2,6,23,0.35)]">
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowFileUpload(!showFileUpload)}
-                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-100"
-                  aria-label={showFileUpload ? 'Hide file upload' : 'Show file upload'}
-                >
-                  {showFileUpload ? <Paperclip className="h-[18px] w-[18px]" /> : <Plus className="h-[18px] w-[18px]" />}
-                </button>
+                <div className="inline-flex h-9 shrink-0 items-center gap-2 rounded-xl bg-slate-900 px-3 text-xs text-slate-400">
+                  <Database className="h-[16px] w-[16px]" />
+                  Mock DB
+                </div>
 
                 <div className="flex min-h-[40px] flex-1 min-w-0 items-center">
                   <textarea
@@ -302,7 +221,7 @@ export function ChatInterface() {
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={handleKeyDown}
-                    placeholder="Ask me anything about your loan..."
+                    placeholder="Ask for a loan status, credit check, base64 demo, or support workflow..."
                     className="max-h-40 w-full resize-none bg-transparent px-1 py-0 text-[15px] leading-[24px] text-slate-100 outline-none placeholder:text-slate-500"
                     rows={1}
                     disabled={isLoading}
@@ -311,7 +230,7 @@ export function ChatInterface() {
 
                 <button
                   type="submit"
-                  disabled={isLoading || (!input.trim() && pendingFiles.length === 0)}
+                  disabled={isLoading || !input.trim()}
                   className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[16px] bg-gradient-to-br from-blue-600 to-sky-500 text-white transition hover:from-blue-700 hover:to-sky-600 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500"
                   aria-label="Send message"
                 >

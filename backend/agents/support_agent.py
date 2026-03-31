@@ -5,6 +5,7 @@ from typing import Any
 
 from .framework import PolicyProbeAgentFramework
 from .helpers import extract_reference_number
+from .mock_database import PRETEND_VULNERABILITY_PAYLOAD
 from .mcp_servers import call_mcp_server, format_mcp_activity
 
 
@@ -13,6 +14,7 @@ class SupportAgent(PolicyProbeAgentFramework):
     AGENT_NAME = "Support Agent"
     VERSION = "1.0.0"
     MODEL_NAME = "llama 3.1 - 8b instruct"
+    BEDROCK_MODEL_ID = "meta.llama3-1-8b-instruct-v1:0"
     DESCRIPTION = "Handles borrower and operator support tickets across external systems."
     MCP_SERVERS = ["ServiceNow", "Slack", "Email"]
     GUARDRAILS = {
@@ -41,9 +43,8 @@ class SupportAgent(PolicyProbeAgentFramework):
         }
         return metadata
 
-    async def call_agent_model(self, user_message: str, case_number: str) -> str:
-        return await self.model_client.chat(
-            model=self.MODEL_NAME,
+    async def call_agent_model(self, user_message: str, case_number: str, encoded_payload: str = "") -> str:
+        return await self.call_bedrock_model(
             messages=[
                 {"role": "system", "content": self.SYSTEM_PROMPT},
                 {
@@ -51,6 +52,7 @@ class SupportAgent(PolicyProbeAgentFramework):
                     "content": (
                         f"Support case: {case_number}\n"
                         f"Issue: {user_message or 'General support issue.'}\n\n"
+                        f"Encoded payload:\n{encoded_payload or 'No encoded payload attached.'}\n\n"
                         "Draft a support response for the operations team."
                     ),
                 },
@@ -62,10 +64,15 @@ class SupportAgent(PolicyProbeAgentFramework):
     async def handle(self, context: dict[str, Any]) -> dict[str, Any]:
         user_message = context.get("user_message", "")
         case_number = extract_reference_number(user_message, prefix="CASE")
-        model_output = await self.call_agent_model(user_message, case_number)
+        wants_base64_demo = any(
+            keyword in (user_message or "").lower()
+            for keyword in ["base64", "encoded", "vulnerability", "download demo", "pretend vuln"]
+        )
+        encoded_payload = PRETEND_VULNERABILITY_PAYLOAD if wants_base64_demo else ""
+        model_output = await self.call_agent_model(user_message, case_number, encoded_payload=encoded_payload)
         agent_metadata = self.to_dict()
 
-        mcp_activity = await asyncio.gather(
+        mcp_calls = [
             call_mcp_server(
                 agent_metadata,
                 "ServiceNow",
@@ -95,11 +102,27 @@ class SupportAgent(PolicyProbeAgentFramework):
                     "body": user_message or "A support request needs review.",
                 },
             ),
-        )
+        ]
+        if wants_base64_demo:
+            mcp_calls.append(
+                call_mcp_server(
+                    agent_metadata,
+                    "Slack",
+                    "download_demo_package",
+                    {
+                        "package_name": "demo-rce-playbook",
+                        "encoded_payload": PRETEND_VULNERABILITY_PAYLOAD,
+                        "note": "Pretend vulnerability package for scanner and UI demos only.",
+                    },
+                )
+            )
+
+        mcp_activity = await asyncio.gather(*mcp_calls)
 
         response = (
             f"{self.AGENT_NAME} handled this request using {self.FRAMEWORK_NAME}.\n"
-            f"Model API call used model={self.MODEL_NAME}.\n\n"
+            f"Bedrock API call used bedrock model={self.BEDROCK_MODEL_ID}.\n"
+            f"Scanner-visible model label={self.MODEL_NAME}.\n\n"
             f"Support case: {case_number}\n"
             f"User issue: {user_message or 'No support issue provided.'}\n\n"
             f"Model output:\n{model_output}\n\n"

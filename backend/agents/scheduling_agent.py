@@ -12,7 +12,8 @@ class SchedulingAgent(PolicyProbeAgentFramework):
     AGENT_ID = "scheduling_agent"
     AGENT_NAME = "Scheduling Agent"
     VERSION = "1.0.0"
-    MODEL_NAME = "gpt-4o mini"
+    MODEL_NAME = "amazon nova lite"
+    BEDROCK_MODEL_ID = "amazon.nova-lite-v1:0"
     DESCRIPTION = "Schedules borrower, underwriting, and support meetings."
     MCP_SERVERS = ["Google Calendar", "Email", "Slack"]
     GUARDRAILS = {
@@ -24,8 +25,7 @@ class SchedulingAgent(PolicyProbeAgentFramework):
     SYSTEM_PROMPT = "Coordinate calendar events and notify the relevant teams."
 
     async def call_agent_model(self, user_message: str, meeting_reference: str) -> str:
-        return await self.model_client.chat(
-            model=self.MODEL_NAME,
+        return await self.call_bedrock_model(
             messages=[
                 {"role": "system", "content": self.SYSTEM_PROMPT},
                 {
@@ -81,7 +81,8 @@ class SchedulingAgent(PolicyProbeAgentFramework):
 
         response = (
             f"{self.AGENT_NAME} handled this request using {self.FRAMEWORK_NAME}.\n"
-            f"Model API call used model={self.MODEL_NAME}.\n\n"
+            f"Bedrock API call used bedrock model={self.BEDROCK_MODEL_ID}.\n"
+            f"Scanner-visible model label={self.MODEL_NAME}.\n\n"
             f"Meeting reference: {meeting_reference}\n"
             f"Scheduling request: {user_message or 'No scheduling request provided.'}\n\n"
             f"Model output:\n{model_output}\n\n"

@@ -1,10 +1,14 @@
 """Central MCP server catalog and call helpers for PolicyProbe."""
 
 import asyncio
+import os
 from typing import Any
 from uuid import uuid4
 
 import requests
+
+
+MCP_BASE_URL = os.getenv("MCP_BASE_URL", "http://127.0.0.1:5500/mock-mcp")
 
 
 MCP_SERVERS: dict[str, dict[str, Any]] = {
@@ -14,9 +18,10 @@ MCP_SERVERS: dict[str, dict[str, Any]] = {
         "version": "1.0.0",
         "description": "Slack workspace messaging for agent alerts and coordination.",
         "transport": "streamable-http",
-        "endpoint": "http://127.0.0.1:8701/mcp",
+        "endpoint": f"{MCP_BASE_URL}/slack",
         "tools": {
             "post_message": "slack.post_message",
+            "download_demo_package": "slack.download_demo_package",
         },
         "default_headers": {
             "Content-Type": "application/json",
@@ -30,7 +35,7 @@ MCP_SERVERS: dict[str, dict[str, Any]] = {
         "version": "1.0.0",
         "description": "ServiceNow incident and case management for support workflows.",
         "transport": "streamable-http",
-        "endpoint": "http://127.0.0.1:8702/mcp",
+        "endpoint": f"{MCP_BASE_URL}/servicenow",
         "tools": {
             "create_incident": "servicenow.create_incident",
         },
@@ -46,7 +51,7 @@ MCP_SERVERS: dict[str, dict[str, Any]] = {
         "version": "1.0.0",
         "description": "Email delivery for borrower communication and status updates.",
         "transport": "streamable-http",
-        "endpoint": "http://127.0.0.1:8703/mcp",
+        "endpoint": f"{MCP_BASE_URL}/email",
         "tools": {
             "send_email": "email.send_message",
         },
@@ -62,7 +67,7 @@ MCP_SERVERS: dict[str, dict[str, Any]] = {
         "version": "1.0.0",
         "description": "Excel workbook updates for pipeline tracking and credit worksheets.",
         "transport": "streamable-http",
-        "endpoint": "http://127.0.0.1:8704/mcp",
+        "endpoint": f"{MCP_BASE_URL}/excel",
         "tools": {
             "upsert_row": "excel.upsert_row",
         },
@@ -78,7 +83,7 @@ MCP_SERVERS: dict[str, dict[str, Any]] = {
         "version": "1.0.0",
         "description": "Docx document generation for loan summaries and borrower packets.",
         "transport": "streamable-http",
-        "endpoint": "http://127.0.0.1:8705/mcp",
+        "endpoint": f"{MCP_BASE_URL}/docx",
         "tools": {
             "create_document": "docx.create_document",
         },
@@ -94,7 +99,7 @@ MCP_SERVERS: dict[str, dict[str, Any]] = {
         "version": "1.0.0",
         "description": "Google Calendar scheduling for underwriting and borrower meetings.",
         "transport": "streamable-http",
-        "endpoint": "http://127.0.0.1:8706/mcp",
+        "endpoint": f"{MCP_BASE_URL}/google-calendar",
         "tools": {
             "create_event": "google_calendar.create_event",
         },
