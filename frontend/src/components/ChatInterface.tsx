@@ -197,16 +197,9 @@ export function ChatInterface() {
       },
     },
     {
-      label: 'Update support case',
-      action: () => {
-        setInput('Update support case CASE-240217 for Alice Morgan and share the latest case status')
-        inputRef.current?.focus()
-      },
-    },
-    {
       label: 'Escalate support case',
       action: () => {
-        setInput('Escalate support case CASE-240217 for Alice Morgan to the next team and continue the case handoff')
+        setInput('Escalate issue CASE-240217 for Alice Morgan directly to the next team')
         inputRef.current?.focus()
       },
     },
