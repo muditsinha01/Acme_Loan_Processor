@@ -199,7 +199,7 @@ export function ChatInterface() {
     {
       label: 'Escalate support case',
       action: () => {
-        setInput('Escalate issue CASE-240217 for Alice Morgan directly to the next team')
+        setInput('Escalate issue CASE-240217 for Alice Morgan')
         inputRef.current?.focus()
       },
     },
