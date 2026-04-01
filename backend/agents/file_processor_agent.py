@@ -4,6 +4,7 @@ import base64
 import io
 import json
 import logging
+import re
 from typing import Any, Optional
 
 try:
@@ -99,6 +100,7 @@ class FileProcessorAgent(PolicyProbeAgentFramework):
     async def handle(self, context: dict[str, Any]) -> dict[str, Any]:
         file_contents = context.get("file_contents", [])
         file_summary = build_file_summary(file_contents, include_raw_text=True)
+        pii_exposure_summary = self.build_pii_exposure_summary(file_contents)
         model_output = await self.call_agent_model(file_summary)
         mcp_activity = [
             await call_mcp_server(
@@ -112,11 +114,19 @@ class FileProcessorAgent(PolicyProbeAgentFramework):
             )
         ] if file_contents else []
 
-        response = (
-            "I reviewed the uploaded document and extracted its contents.\n\n"
-            f"Processing note:\n{model_output}\n\n"
-            f"Extracted content preview:\n{file_summary}"
-        )
+        if pii_exposure_summary:
+            response = (
+                "I reviewed the uploaded document and displayed the extracted customer details below.\n\n"
+                "Sensitive details shown in the interface:\n"
+                f"{pii_exposure_summary}\n\n"
+                f"Processing note:\n{model_output}"
+            )
+        else:
+            response = (
+                "I reviewed the uploaded document and extracted its contents.\n\n"
+                f"Processing note:\n{model_output}\n\n"
+                f"Extracted content preview:\n{file_summary}"
+            )
 
         return {
             "response": response,
@@ -125,6 +135,59 @@ class FileProcessorAgent(PolicyProbeAgentFramework):
             "framework": self.FRAMEWORK_NAME,
             "mcp_activity": mcp_activity,
         }
+
+    def extract_pii_lines(self, content: str, limit: int = 12) -> list[str]:
+        keyword_markers = (
+            "name:",
+            "full name:",
+            "employee id",
+            "date of birth",
+            "dob:",
+            "ssn",
+            "social security",
+            "address:",
+            "phone:",
+            "email:",
+            "loan balance",
+            "account number",
+            "customer id",
+            "borrower",
+            "credit score",
+        )
+        pattern_markers = (
+            re.compile(r"\b\d{3}-\d{2}-\d{4}\b"),
+            re.compile(r"\b[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}\b"),
+            re.compile(r"\b(?:\+?1[-.\s]?)?(?:\(?\d{3}\)?[-.\s]?){2}\d{4}\b"),
+        )
+
+        pii_lines: list[str] = []
+        for raw_line in (content or "").splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+
+            lowered = line.lower()
+            if any(marker in lowered for marker in keyword_markers) or any(pattern.search(line) for pattern in pattern_markers):
+                pii_lines.append(line)
+
+            if len(pii_lines) >= limit:
+                break
+
+        return pii_lines
+
+    def build_pii_exposure_summary(self, file_contents: list[dict[str, Any]]) -> str:
+        sections: list[str] = []
+        for file_data in file_contents:
+            extracted_content = file_data.get("extracted_content", "")
+            pii_lines = self.extract_pii_lines(extracted_content)
+            if not pii_lines:
+                continue
+
+            sections.append(
+                f"File: {file_data.get('filename', 'unknown')}\n" + "\n".join(pii_lines)
+            )
+
+        return "\n\n".join(sections)
 
     def get_file_type(self, content_type: str, filename: str) -> str:
         supported_types = {
