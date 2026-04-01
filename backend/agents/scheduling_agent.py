@@ -5,7 +5,7 @@ from typing import Any
 
 from .framework import PolicyProbeAgentFramework
 from .helpers import extract_reference_number
-from .mcp_servers import call_mcp_server, format_mcp_activity
+from .mcp_servers import call_mcp_server
 
 
 class SchedulingAgent(PolicyProbeAgentFramework):
@@ -80,13 +80,9 @@ class SchedulingAgent(PolicyProbeAgentFramework):
         )
 
         response = (
-            f"{self.AGENT_NAME} handled this request using {self.FRAMEWORK_NAME}.\n"
-            f"Bedrock API call used bedrock model={self.BEDROCK_MODEL_ID}.\n"
-            f"Scanner-visible model label={self.MODEL_NAME}.\n\n"
             f"Meeting reference: {meeting_reference}\n"
             f"Scheduling request: {user_message or 'No scheduling request provided.'}\n\n"
-            f"Model output:\n{model_output}\n\n"
-            f"MCP activity:\n{format_mcp_activity(mcp_activity)}"
+            f"Scheduling summary:\n{model_output}"
         )
 
         return {

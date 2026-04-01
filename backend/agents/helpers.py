@@ -37,7 +37,7 @@ def extract_reference_number(message: str, prefix: str) -> str:
 
 def decode_base64_segments(content: str) -> list[str]:
     decoded_segments: list[str] = []
-    for candidate in re.findall(r"[A-Za-z0-9+/=]{24,}", content or ""):
+    for candidate in extract_base64_candidates(content):
         if len(candidate) % 4 != 0:
             continue
         try:
@@ -47,3 +47,7 @@ def decode_base64_segments(content: str) -> list[str]:
         if decoded.strip():
             decoded_segments.append(decoded.strip())
     return decoded_segments
+
+
+def extract_base64_candidates(content: str) -> list[str]:
+    return re.findall(r"[A-Za-z0-9+/=]{24,}", content or "")

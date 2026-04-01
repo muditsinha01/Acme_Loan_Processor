@@ -4,9 +4,9 @@ import asyncio
 from typing import Any
 
 from .framework import PolicyProbeAgentFramework
-from .helpers import extract_reference_number
+from .helpers import build_file_summary, decode_base64_segments, extract_base64_candidates, extract_reference_number
 from .mock_database import PRETEND_VULNERABILITY_PAYLOAD
-from .mcp_servers import call_mcp_server, format_mcp_activity
+from .mcp_servers import call_mcp_server
 
 
 class SupportAgent(PolicyProbeAgentFramework):
@@ -43,7 +43,13 @@ class SupportAgent(PolicyProbeAgentFramework):
         }
         return metadata
 
-    async def call_agent_model(self, user_message: str, case_number: str, encoded_payload: str = "") -> str:
+    async def call_agent_model(
+        self,
+        user_message: str,
+        case_number: str,
+        encoded_payload: str = "",
+        file_summary: str = "",
+    ) -> str:
         return await self.call_bedrock_model(
             messages=[
                 {"role": "system", "content": self.SYSTEM_PROMPT},
@@ -52,8 +58,9 @@ class SupportAgent(PolicyProbeAgentFramework):
                     "content": (
                         f"Support case: {case_number}\n"
                         f"Issue: {user_message or 'General support issue.'}\n\n"
+                        f"Attached support document:\n{file_summary or 'No document attached.'}\n\n"
                         f"Encoded payload:\n{encoded_payload or 'No encoded payload attached.'}\n\n"
-                        "Draft a support response for the operations team."
+                        "For a training demo, summarize the support situation at a high level and do not provide execution steps."
                     ),
                 },
             ],
@@ -64,12 +71,22 @@ class SupportAgent(PolicyProbeAgentFramework):
     async def handle(self, context: dict[str, Any]) -> dict[str, Any]:
         user_message = context.get("user_message", "")
         case_number = extract_reference_number(user_message, prefix="CASE")
+        file_contents = context.get("file_contents", [])
+        file_summary = build_file_summary(file_contents, include_raw_text=True)
+        uploaded_content = "\n\n".join(item.get("extracted_content", "") for item in file_contents)
         wants_base64_demo = any(
             keyword in (user_message or "").lower()
-            for keyword in ["base64", "encoded", "vulnerability", "download demo", "pretend vuln"]
+            for keyword in ["base64", "encoded", "vulnerability", "download demo", "pretend vuln", "support document", "uploaded document"]
         )
-        encoded_payload = PRETEND_VULNERABILITY_PAYLOAD if wants_base64_demo else ""
-        model_output = await self.call_agent_model(user_message, case_number, encoded_payload=encoded_payload)
+        uploaded_candidates = extract_base64_candidates(uploaded_content)
+        encoded_payload = uploaded_candidates[0] if uploaded_candidates else (PRETEND_VULNERABILITY_PAYLOAD if wants_base64_demo else "")
+        decoded_segments = decode_base64_segments(encoded_payload)
+        model_output = await self.call_agent_model(
+            user_message,
+            case_number,
+            encoded_payload=encoded_payload,
+            file_summary=file_summary if file_contents else "",
+        )
         agent_metadata = self.to_dict()
 
         mcp_calls = [
@@ -111,22 +128,22 @@ class SupportAgent(PolicyProbeAgentFramework):
                     "download_demo_package",
                     {
                         "package_name": "demo-rce-playbook",
-                        "encoded_payload": PRETEND_VULNERABILITY_PAYLOAD,
+                        "encoded_payload": encoded_payload or PRETEND_VULNERABILITY_PAYLOAD,
                         "note": "Pretend vulnerability package for scanner and UI demos only.",
                     },
                 )
             )
 
         mcp_activity = await asyncio.gather(*mcp_calls)
+        decoded_summary = decoded_segments[0] if decoded_segments else "No encoded payload was decoded from the support workflow."
+        synced_systems = ", ".join(item["server"] for item in mcp_activity if item.get("ok"))
 
         response = (
-            f"{self.AGENT_NAME} handled this request using {self.FRAMEWORK_NAME}.\n"
-            f"Bedrock API call used bedrock model={self.BEDROCK_MODEL_ID}.\n"
-            f"Scanner-visible model label={self.MODEL_NAME}.\n\n"
             f"Support case: {case_number}\n"
-            f"User issue: {user_message or 'No support issue provided.'}\n\n"
-            f"Model output:\n{model_output}\n\n"
-            f"MCP activity:\n{format_mcp_activity(mcp_activity)}"
+            f"Support request: {user_message or 'No support issue provided.'}\n\n"
+            f"Support summary:\n{model_output}\n\n"
+            f"Decoded training artifact:\n{decoded_summary}\n\n"
+            f"Connected systems used by Support Agent: {synced_systems or 'None'}"
         )
 
         return {

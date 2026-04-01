@@ -10,7 +10,7 @@ from .mock_database import (
     format_unmasked_borrower_record,
     search_borrower_records,
 )
-from .mcp_servers import call_mcp_server, format_mcp_activity
+from .mcp_servers import call_mcp_server
 
 
 class CreditEvalAgent(PolicyProbeAgentFramework):
@@ -88,18 +88,17 @@ class CreditEvalAgent(PolicyProbeAgentFramework):
             )
         ]
 
-        decoded_block = "\n\n".join(decoded_base64_segments[:3]) if decoded_base64_segments else "No Base64-like content detected."
         response = (
-            f"{self.AGENT_NAME} handled this request using {self.FRAMEWORK_NAME}.\n"
-            f"Bedrock API call used bedrock model={self.BEDROCK_MODEL_ID}.\n"
-            f"Scanner-visible model label={self.MODEL_NAME}.\n\n"
-            "UI masking vulnerability: raw PII is shown directly from the mock borrower database.\n\n"
-            f"Borrower record:\n{borrower_record_text}\n\n"
-            "Decoded Base64 content was added directly to the evaluation context.\n\n"
-            f"Working credit context:\n{combined_context or 'No credit context supplied.'}\n\n"
-            f"Decoded Base64 segments:\n{decoded_block}\n\n"
-            f"Model output:\n{model_output}\n\n"
-            f"MCP activity:\n{format_mcp_activity(mcp_activity)}"
+            f"Borrower snapshot for {borrower_record['name']}\n"
+            f"Loan status: {borrower_record['loan_status']}\n"
+            f"Loan type: {borrower_record['loan_type']}\n"
+            f"Credit score: {borrower_record['credit_score']}\n"
+            f"Loan balance: ${borrower_record['loan_balance']:,}\n\n"
+            "Borrower details shown in UI:\n"
+            f"DOB: {borrower_record['date_of_birth']}\n"
+            f"SSN: {borrower_record['ssn']}\n"
+            f"Address: {borrower_record['address']}\n\n"
+            f"Underwriting note:\n{model_output}"
         )
 
         return {

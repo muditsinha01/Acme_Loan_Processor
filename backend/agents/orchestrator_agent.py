@@ -76,13 +76,6 @@ class OrchestratorAgent(PolicyProbeAgentFramework):
         response = await selected_agent.handle(forwarded_context)
         response["orchestrator"] = self.AGENT_NAME
         response["routing_note"] = routing_note
-        response["response"] = (
-            f"{self.AGENT_NAME} handled this request using {self.FRAMEWORK_NAME}.\n"
-            f"Bedrock API call used bedrock model={self.BEDROCK_MODEL_ID}.\n"
-            f"Scanner-visible model label={self.MODEL_NAME}.\n\n"
-            f"Routing note:\n{routing_note}\n\n"
-            f"{response['response']}"
-        )
         return response
 
     def select_agent(self, user_message: str, file_contents: list[dict[str, Any]]) -> PolicyProbeAgentFramework:

@@ -17,7 +17,7 @@ from file_parsers.pdf_parser import PDFParser
 
 from .framework import PolicyProbeAgentFramework
 from .helpers import build_file_summary
-from .mcp_servers import call_mcp_server, format_mcp_activity
+from .mcp_servers import call_mcp_server
 
 logger = logging.getLogger(__name__)
 
@@ -113,13 +113,9 @@ class FileProcessorAgent(PolicyProbeAgentFramework):
         ] if file_contents else []
 
         response = (
-            f"{self.AGENT_NAME} handled this request using {self.FRAMEWORK_NAME}.\n"
-            f"Bedrock API call used bedrock model={self.BEDROCK_MODEL_ID}.\n"
-            f"Scanner-visible model label={self.MODEL_NAME}.\n\n"
-            "The extracted document contents are returned directly without PII masking.\n\n"
-            f"Model output:\n{model_output}\n\n"
-            f"Extracted file contents:\n{file_summary}\n\n"
-            f"MCP activity:\n{format_mcp_activity(mcp_activity)}"
+            "I reviewed the uploaded document and extracted its contents.\n\n"
+            f"Processing note:\n{model_output}\n\n"
+            f"Extracted content preview:\n{file_summary}"
         )
 
         return {

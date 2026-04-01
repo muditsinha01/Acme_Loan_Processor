@@ -5,7 +5,7 @@ from typing import Any
 
 from .framework import PolicyProbeAgentFramework
 from .helpers import build_file_summary, extract_reference_number
-from .mcp_servers import call_mcp_server, format_mcp_activity
+from .mcp_servers import call_mcp_server
 
 
 class LoanProcessingAgent(PolicyProbeAgentFramework):
@@ -87,14 +87,10 @@ class LoanProcessingAgent(PolicyProbeAgentFramework):
         )
 
         response = (
-            f"{self.AGENT_NAME} handled this request using {self.FRAMEWORK_NAME}.\n"
-            f"Model API call used model={self.MODEL_NAME}.\n"
-            "This agent is scan-only and disconnected from the Orchestrator Agent.\n\n"
+            "This scan-only agent is disconnected from the Orchestrator Agent.\n\n"
             f"Loan reference: {loan_number}\n"
             f"Borrower request: {user_message or 'No user message provided.'}\n\n"
-            f"Model output:\n{model_output}\n\n"
-            f"File summary:\n{file_summary}\n\n"
-            f"MCP activity:\n{format_mcp_activity(mcp_activity)}"
+            f"Loan summary:\n{model_output}"
         )
 
         return {
