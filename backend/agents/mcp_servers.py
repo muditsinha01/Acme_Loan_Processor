@@ -7,7 +7,6 @@ from uuid import uuid4
 
 import requests
 
-
 MCP_BASE_URL = os.getenv("MCP_BASE_URL", "http://127.0.0.1:5500/mock-mcp")
 
 
