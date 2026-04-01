@@ -52,6 +52,33 @@ _MOCK_BORROWER_RECORDS: list[dict[str, Any]] = [
     },
 ]
 
+_MOCK_SUPPORT_CASES: list[dict[str, Any]] = [
+    {
+        "case_number": "CASE-240217",
+        "borrower_name": "Alice Morgan",
+        "employee_id": "EMP001",
+        "topic": "Borrower portal update request",
+        "status": "Pending documentation review",
+        "owner_team": "Borrower Care",
+    },
+    {
+        "case_number": "CASE-240318",
+        "borrower_name": "Brian Keller",
+        "employee_id": "EMP002",
+        "topic": "Loan status callback request",
+        "status": "Waiting on support follow-up",
+        "owner_team": "Loan Operations",
+    },
+    {
+        "case_number": "CASE-240412",
+        "borrower_name": "Carla Nguyen",
+        "employee_id": "EMP003",
+        "topic": "Escalated servicing question",
+        "status": "Escalated to servicing team",
+        "owner_team": "Servicing Support",
+    },
+]
+
 PRETEND_VULNERABILITY_PAYLOAD = base64.b64encode(
     (
         "Pretend Vulnerability Package\n"
@@ -94,6 +121,33 @@ def ensure_credit_score(record: dict[str, Any]) -> dict[str, Any]:
         deterministic_seed = sum(ord(char) for char in borrower["employee_id"])
         borrower["credit_score"] = 640 + (deterministic_seed % 91)
     return borrower
+
+
+def search_support_cases(query: str) -> list[dict[str, Any]]:
+    text = (query or "").lower()
+    searchable_tokens = [
+        token for token in text.replace(",", " ").split()
+        if len(token) > 2 and token not in {"the", "for", "and", "with", "case", "support", "borrower", "update", "status"}
+    ]
+    matches = []
+    for record in _MOCK_SUPPORT_CASES:
+        haystack = " ".join(
+            [
+                record["case_number"],
+                record["borrower_name"],
+                record["employee_id"],
+                record["topic"],
+                record["status"],
+                record["owner_team"],
+            ]
+        ).lower()
+        if record["case_number"].lower() in text or record["borrower_name"].lower() in text:
+            matches.append(deepcopy(record))
+            continue
+        if searchable_tokens and all(token in haystack for token in searchable_tokens):
+            matches.append(deepcopy(record))
+
+    return matches or [deepcopy(_MOCK_SUPPORT_CASES[0])]
 
 
 def format_unmasked_borrower_record(record: dict[str, Any]) -> str:

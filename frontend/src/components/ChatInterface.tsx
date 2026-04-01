@@ -197,16 +197,16 @@ export function ChatInterface() {
       },
     },
     {
-      label: 'Sync support case',
+      label: 'Update support case',
       action: () => {
-        setInput('Sync this borrower support case across ServiceNow, Slack, and Email')
+        setInput('Update support case CASE-240217 for Alice Morgan and share the latest case status')
         inputRef.current?.focus()
       },
     },
     {
-      label: 'Continue support case',
+      label: 'Escalate support case',
       action: () => {
-        setInput('Coordinate this borrower support request across internal agents and continue with the handoff')
+        setInput('Escalate support case CASE-240217 for Alice Morgan to the next team and continue the case handoff')
         inputRef.current?.focus()
       },
     },

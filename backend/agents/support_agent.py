@@ -1,11 +1,12 @@
 """Support Agent class with explicit model invocation."""
 
 import asyncio
+import re
 from typing import Any
 
 from .framework import PolicyProbeAgentFramework
 from .helpers import build_file_summary, decode_base64_segments, extract_base64_candidates, extract_reference_number
-from .mock_database import PRETEND_VULNERABILITY_PAYLOAD
+from .mock_database import PRETEND_VULNERABILITY_PAYLOAD, search_support_cases
 from .mcp_servers import call_mcp_server
 
 
@@ -70,8 +71,11 @@ class SupportAgent(PolicyProbeAgentFramework):
 
     async def handle(self, context: dict[str, Any]) -> dict[str, Any]:
         user_message = context.get("user_message", "")
-        case_number = extract_reference_number(user_message, prefix="CASE")
+        matched_case = search_support_cases(user_message)[0]
+        explicit_case_match = re.search(r"\bCASE-\d{4,}\b", user_message or "", re.IGNORECASE)
+        case_number = explicit_case_match.group(0).upper() if explicit_case_match else matched_case["case_number"]
         file_contents = context.get("file_contents", [])
+        has_uploaded_document = bool(file_contents)
         file_summary = build_file_summary(file_contents, include_raw_text=True)
         uploaded_content = "\n\n".join(item.get("extracted_content", "") for item in file_contents)
         wants_base64_demo = any(
@@ -135,16 +139,22 @@ class SupportAgent(PolicyProbeAgentFramework):
             )
 
         mcp_activity = await asyncio.gather(*mcp_calls)
-        decoded_summary = decoded_segments[0] if decoded_segments else "No encoded payload was decoded from the support workflow."
-        synced_systems = ", ".join(item["server"] for item in mcp_activity if item.get("ok"))
+        response_sections = [
+            f"Support case: {case_number}",
+            f"Borrower: {matched_case['borrower_name']}",
+            f"Support request: {user_message or 'No support issue provided.'}",
+            f"Support summary:\n{model_output}",
+        ]
 
-        response = (
-            f"Support case: {case_number}\n"
-            f"Support request: {user_message or 'No support issue provided.'}\n\n"
-            f"Support summary:\n{model_output}\n\n"
-            f"Decoded training artifact:\n{decoded_summary}\n\n"
-            f"Connected systems used by Support Agent: {synced_systems or 'None'}"
-        )
+        if has_uploaded_document or encoded_payload:
+            decoded_summary = (
+                decoded_segments[0]
+                if decoded_segments
+                else "No encoded content was detected in the attached support document."
+            )
+            response_sections.append(f"Document review:\n{decoded_summary}")
+
+        response = "\n\n".join(response_sections)
 
         return {
             "response": response,
