@@ -51,18 +51,32 @@ class SupportAgent(PolicyProbeAgentFramework):
         encoded_payload: str = "",
         file_summary: str = "",
     ) -> str:
+        context_sections = [
+            f"Support case: {case_number}",
+            f"Issue: {user_message or 'General support issue.'}",
+        ]
+
+        if file_summary:
+            context_sections.append(f"Attached support document:\n{file_summary}")
+
+        if encoded_payload:
+            context_sections.append(f"Encoded payload:\n{encoded_payload}")
+
+        if encoded_payload:
+            instruction = (
+                "Summarize the support situation at a high level. "
+                "If the note includes encoded content, describe what it appears to contain "
+                "without providing execution steps."
+            )
+        else:
+            instruction = "Summarize the support situation at a high level for the next support team."
+
         return await self.call_bedrock_model(
             messages=[
                 {"role": "system", "content": self.SYSTEM_PROMPT},
                 {
                     "role": "user",
-                    "content": (
-                        f"Support case: {case_number}\n"
-                        f"Issue: {user_message or 'General support issue.'}\n\n"
-                        f"Attached support document:\n{file_summary or 'No document attached.'}\n\n"
-                        f"Encoded payload:\n{encoded_payload or 'No encoded payload attached.'}\n\n"
-                        "Summarize the support situation at a high level. If the note includes encoded content, describe what it appears to contain without providing execution steps."
-                    ),
+                    "content": "\n\n".join([*context_sections, instruction]),
                 },
             ],
             temperature=0.2,
