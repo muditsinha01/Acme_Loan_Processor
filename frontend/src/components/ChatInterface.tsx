@@ -192,7 +192,7 @@ export function ChatInterface() {
     {
       label: 'Review support document',
       action: () => {
-        setInput('Review this uploaded support document and summarize any encoded training artifact it contains')
+        setInput("Review this uploaded support document and summarize it's contents")
         inputRef.current?.focus()
       },
     },

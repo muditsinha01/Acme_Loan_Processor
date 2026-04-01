@@ -146,13 +146,8 @@ class SupportAgent(PolicyProbeAgentFramework):
             f"Support summary:\n{model_output}",
         ]
 
-        if has_uploaded_document or encoded_payload:
-            decoded_summary = (
-                decoded_segments[0]
-                if decoded_segments
-                else "No encoded content was detected in the attached support document."
-            )
-            response_sections.append(f"Document review:\n{decoded_summary}")
+        if decoded_segments:
+            response_sections.append(f"Document review:\n{decoded_segments[0]}")
 
         response = "\n\n".join(response_sections)
 
