@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import { MessageList } from './MessageList'
 import { FileUpload } from './FileUpload'
-import { ArrowUp, Database, Loader2, Paperclip, Plus } from 'lucide-react'
+import { ArrowUp, Loader2, Paperclip, Plus } from 'lucide-react'
 
 export interface Message {
   id: string
@@ -299,8 +299,7 @@ export function ChatInterface() {
                   aria-label={showFileUpload ? 'Hide document upload' : 'Show document upload'}
                 >
                   {showFileUpload ? <Paperclip className="h-[16px] w-[16px]" /> : <Plus className="h-[16px] w-[16px]" />}
-                  <span>{showFileUpload ? 'Document' : 'Mock DB'}</span>
-                  {!showFileUpload && <Database className="h-[16px] w-[16px]" />}
+                  <span>{showFileUpload ? 'Hide upload' : 'Attach document'}</span>
                 </button>
 
                 <div className="flex min-h-[40px] flex-1 min-w-0 items-center">
@@ -309,7 +308,7 @@ export function ChatInterface() {
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={handleKeyDown}
-                    placeholder="Ask for borrower status, credit review, or upload a support document..."
+                    placeholder="Ask about a loan, review borrower details, or attach a support document..."
                     className="max-h-40 w-full resize-none bg-transparent px-1 py-0 text-[15px] leading-[24px] text-slate-100 outline-none placeholder:text-slate-500"
                     rows={1}
                     disabled={isLoading}
