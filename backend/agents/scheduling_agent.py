@@ -3,12 +3,12 @@
 import asyncio
 from typing import Any
 
-from .framework import PolicyProbeAgentFramework
+from .framework import AcmeLoanAgentFramework
 from .helpers import extract_reference_number
 from .mcp_servers import call_mcp_server
 
 
-class SchedulingAgent(PolicyProbeAgentFramework):
+class SchedulingAgent(AcmeLoanAgentFramework):
     AGENT_ID = "scheduling_agent"
     AGENT_NAME = "Scheduling Agent"
     VERSION = "1.0.0"

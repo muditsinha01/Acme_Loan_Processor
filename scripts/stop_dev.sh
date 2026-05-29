@@ -1,13 +1,13 @@
 #!/bin/bash
 #
-# PolicyProbe Development Server Stop Script
+# Acme Loan Processor Development Server Stop Script
 #
 # This script stops both the frontend and backend servers.
 # Run from anywhere: ./scripts/stop_dev.sh
 #
 
 echo "=========================================="
-echo "  Stopping PolicyProbe Servers"
+echo "  Stopping Acme Loan Processor Servers"
 echo "=========================================="
 echo ""
 

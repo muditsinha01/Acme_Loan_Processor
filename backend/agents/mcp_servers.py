@@ -1,4 +1,4 @@
-"""Central MCP server catalog and call helpers for PolicyProbe."""
+"""Central MCP server catalog and call helpers for Acme Loan Processor."""
 
 import asyncio
 import os

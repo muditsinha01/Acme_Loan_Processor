@@ -1,5 +1,5 @@
 {
-  "name": "policyprobe-frontend",
+  "name": "acme-loan-processor-frontend",
   "version": "0.1.0",
   "private": true,
   "scripts": {

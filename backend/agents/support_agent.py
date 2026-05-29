@@ -2,12 +2,12 @@
 
 from typing import Any
 
-from .framework import PolicyProbeAgentFramework
+from .framework import AcmeLoanAgentFramework
 from .helpers import extract_reference_number
 from .mock_database import search_support_cases
 
 
-class SupportAgent(PolicyProbeAgentFramework):
+class SupportAgent(AcmeLoanAgentFramework):
     AGENT_ID = "support_agent"
     AGENT_NAME = "Support Agent"
     VERSION = "1.0.0"

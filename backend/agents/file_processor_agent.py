@@ -16,14 +16,14 @@ from file_parsers.html_parser import HTMLParser
 from file_parsers.image_parser import ImageParser
 from file_parsers.pdf_parser import PDFParser
 
-from .framework import PolicyProbeAgentFramework
+from .framework import AcmeLoanAgentFramework
 from .helpers import build_file_summary
 from .mcp_servers import call_mcp_server
 
 logger = logging.getLogger(__name__)
 
 
-class FileProcessorAgent(PolicyProbeAgentFramework):
+class FileProcessorAgent(AcmeLoanAgentFramework):
     AGENT_ID = "file_processor_agent"
     AGENT_NAME = "File Processor Agent"
     VERSION = "1.0.0"

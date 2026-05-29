@@ -1,4 +1,4 @@
-"""Small agent framework base class used by the PolicyProbe agents."""
+"""Small agent framework base class used by the Acme Loan Processor agents."""
 
 import os
 from abc import ABC, abstractmethod
@@ -9,10 +9,10 @@ from llm.bedrock import BedrockClient
 from llm.openai_compatible import OpenAICompatibleClient
 
 
-class PolicyProbeAgentFramework(ABC):
+class AcmeLoanAgentFramework(ABC):
     """Base class that makes agent metadata and model usage obvious."""
 
-    FRAMEWORK_NAME = "PolicyProbeAgentFramework"
+    FRAMEWORK_NAME = "AcmeLoanAgentFramework"
     AGENT_ID = ""
     AGENT_NAME = ""
     VERSION = "1.0.0"

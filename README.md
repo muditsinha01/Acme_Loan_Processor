@@ -29,19 +29,19 @@ Acme Loan Assistant is a deliberately vulnerable chat agent application designed
 1. **Build the image**
 
 ```bash
-docker build -t policyprobe:local .
+docker build -t acme-loan-processor:local .
 ```
 
 2. **Run the container**
 
 ```bash
 docker run -d \
-  --name policyprobe \
+  --name acme-loan-processor \
   -p 80:5001 \
   -e AWS_REGION=us-west-2 \
   -e BEDROCK_MODEL_ID=amazon.nova-micro-v1:0 \
   -e AGENT_SECRET=your_random_secret \
-  policyprobe:local
+  acme-loan-processor:local
 ```
 
 3. **Open the app** at http://localhost (Acme Loan Assistant interface)
@@ -62,7 +62,7 @@ docker run -d \
 1. **Copy environment file**
 
 ```bash
-cd policyprobe
+cd Acme_Loan_Processor
 
 # Copy environment template
 cp .env.example .env
@@ -120,7 +120,7 @@ The Acme Loan Assistant UI features a clean, modern design:
 ## Project Structure
 
 ```
-policyprobe/
+Acme_Loan_Processor/
 ├── frontend/                    # Next.js React frontend (Acme Loan Assistant UI)
 │   ├── src/
 │   │   ├── app/                 # Next.js app router, layout, globals
@@ -223,7 +223,7 @@ python scripts/create_test_files.py
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│              Acme Loan Assistant (PolicyProbe)              │
+│                    Acme Loan Assistant                      │
 │              Next.js + React · Light theme · Manrope         │
 └─────────────────────────────────────────────────────────────┘
                             │

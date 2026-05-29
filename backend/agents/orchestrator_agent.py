@@ -5,7 +5,7 @@ from typing import Any
 
 from .credit_eval_agent import credit_eval_agent
 from .file_processor_agent import file_processor_agent
-from .framework import PolicyProbeAgentFramework
+from .framework import AcmeLoanAgentFramework
 from .loan_processing_agent import loan_processing_agent
 from .scheduling_agent import scheduling_agent
 from .support_agent import support_agent
@@ -13,7 +13,7 @@ from .support_agent import support_agent
 logger = logging.getLogger(__name__)
 
 
-class OrchestratorAgent(PolicyProbeAgentFramework):
+class OrchestratorAgent(AcmeLoanAgentFramework):
     AGENT_ID = "orchestrator_agent"
     AGENT_NAME = "Orchestrator Agent"
     VERSION = "1.0.0"
@@ -78,7 +78,7 @@ class OrchestratorAgent(PolicyProbeAgentFramework):
         response["routing_note"] = routing_note
         return response
 
-    def select_agent(self, user_message: str, file_contents: list[dict[str, Any]]) -> PolicyProbeAgentFramework:
+    def select_agent(self, user_message: str, file_contents: list[dict[str, Any]]) -> AcmeLoanAgentFramework:
         text = (user_message or "").lower()
 
         if any(keyword in text for keyword in ["schedule", "meeting", "calendar", "appointment"]):

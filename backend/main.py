@@ -1,5 +1,5 @@
 """
-PolicyProbe Backend - FastAPI Application
+Acme Loan Processor Backend - FastAPI Application
 
 This entry point exposes the vulnerable multi-agent loan workflow used by the
 demo UI. The backend now routes through a central agent catalog so the agent
@@ -38,13 +38,13 @@ MCP_CALL_LOG: list[dict] = []
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler."""
-    logger.info("PolicyProbe backend starting up...")
+    logger.info("Acme Loan Processor backend starting up...")
     yield
-    logger.info("PolicyProbe backend shutting down...")
+    logger.info("Acme Loan Processor backend shutting down...")
 
 
 app = FastAPI(
-    title="PolicyProbe",
+    title="Acme Loan Processor",
     description="AI-powered policy evaluation and remediation demo",
     version="0.1.0",
     lifespan=lifespan,
@@ -88,7 +88,7 @@ class ChatResponse(BaseModel):
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
-    return {"status": "healthy", "service": "policyprobe"}
+    return {"status": "healthy", "service": "acme-loan-processor"}
 
 
 @app.post("/chat", response_model=ChatResponse)

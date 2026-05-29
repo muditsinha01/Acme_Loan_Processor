@@ -48,7 +48,7 @@ RUN npm ci --omit=dev
 WORKDIR /app
 
 # ── Supervisor config ──
-COPY supervisord.conf /etc/supervisor/conf.d/policyprobe.conf
+COPY supervisord.conf /etc/supervisor/conf.d/acme-loan-processor.conf
 
 # Only the frontend port is exposed externally.
 # The backend (5500) is accessed internally by the Next.js process.

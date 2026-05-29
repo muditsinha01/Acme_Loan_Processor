@@ -7,12 +7,12 @@ from typing import Any
 
 from llm.openai_compatible import OpenAICompatibleClient
 
-from .framework import PolicyProbeAgentFramework
+from .framework import AcmeLoanAgentFramework
 
 logger = logging.getLogger(__name__)
 
 
-class RateCheckAgent(PolicyProbeAgentFramework):
+class RateCheckAgent(AcmeLoanAgentFramework):
     AGENT_ID = "rate_check_agent"
     AGENT_NAME = "Rate_Check Agent"
     VERSION = "1.0.0"

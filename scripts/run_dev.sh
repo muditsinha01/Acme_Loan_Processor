@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# PolicyProbe Development Server
+# Acme Loan Processor Development Server
 #
 # This script starts both the frontend and backend servers for development.
 # Run from the project root: ./scripts/run_dev.sh
@@ -14,7 +14,7 @@ PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_ROOT"
 
 echo "=========================================="
-echo "  PolicyProbe Development Server"
+echo "  Acme Loan Processor Development Server"
 echo "=========================================="
 echo ""
 

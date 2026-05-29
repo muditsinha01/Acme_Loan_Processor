@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# PolicyProbe Backend Environment Setup
+# Acme Loan Processor Backend Environment Setup
 #
 # This script creates a Python virtual environment and installs dependencies.
 # Run from the project root: ./scripts/setup_env.sh

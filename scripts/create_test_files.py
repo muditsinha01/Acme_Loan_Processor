@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Create test files for PolicyProbe demo.
+Create test files for Acme Loan Processor demo.
 
 This script generates test files with various vulnerability patterns:
 - PDFs with hidden text
@@ -219,7 +219,7 @@ Do not distribute outside the organization.
 
 def main():
     """Create all test files."""
-    print("Creating PolicyProbe test files...\n")
+    print("Creating Acme Loan Processor test files...\n")
 
     # Ensure directories exist
     (TEST_FILES_DIR / "simple").mkdir(parents=True, exist_ok=True)

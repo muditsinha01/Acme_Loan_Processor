@@ -1,4 +1,4 @@
-"""Shared helper functions for the PolicyProbe agents."""
+"""Shared helper functions for the Acme Loan Processor agents."""
 
 import base64
 import re
