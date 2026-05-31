@@ -2,6 +2,7 @@
 
 import { Message } from './ChatInterface'
 import { ErrorDisplay } from './ErrorDisplay'
+import { SkillWorkflowProgress } from './SkillWorkflowProgress'
 import { Paperclip } from 'lucide-react'
 
 interface MessageListProps {
@@ -68,8 +69,15 @@ export function MessageList({ messages }: MessageListProps) {
 
               {message.error ? (
                 <ErrorDisplay error={message.error} />
+              ) : message.kind === 'skill_workflow' && message.workflowStages ? (
+                <SkillWorkflowProgress
+                  stages={message.workflowStages}
+                  skillName={message.skillInvocation?.name}
+                  skillDescription={message.skillInvocation?.description}
+                  isComplete={message.workflowComplete}
+                />
               ) : (
-                  <div className="message-content text-sm sm:text-[15px]">{message.content}</div>
+                  <div className="message-content whitespace-pre-wrap text-sm sm:text-[15px]">{message.content}</div>
               )}
               </div>
 

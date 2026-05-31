@@ -79,10 +79,30 @@ class PolicyError(BaseModel):
     details: Optional[dict] = None
 
 
+class SkillInvocation(BaseModel):
+    id: str
+    name: str
+    version: str
+    description: str
+    status: str
+
+
+class WorkflowStage(BaseModel):
+    id: str
+    label: str
+    duration_ms: int
+
+
 class ChatResponse(BaseModel):
     response: str
     conversation_id: Optional[str] = None
     policy_warning: Optional[PolicyError] = None
+    workflow_status: Optional[str] = None
+    agent: Optional[str] = None
+    skill_invocation: Optional[SkillInvocation] = None
+    skill_used: Optional[bool] = None
+    skill_content_bytes: Optional[int] = None
+    workflow_stages: Optional[list[WorkflowStage]] = None
 
 
 @app.get("/health")
@@ -134,10 +154,24 @@ async def chat(request: ChatRequest):
 
         response = await handle_chat_request(context)
 
+        skill_invocation = response.get("skill_invocation")
+        workflow_stages = response.get("workflow_stages")
         return ChatResponse(
             response=response.get("response", "I processed your request."),
             conversation_id=request.conversation_id,
             policy_warning=response.get("policy_warning"),
+            workflow_status=response.get("workflow_status"),
+            agent=response.get("agent"),
+            skill_used=response.get("skill_used"),
+            skill_content_bytes=response.get("skill_content_bytes"),
+            workflow_stages=(
+                [WorkflowStage(**stage) for stage in workflow_stages]
+                if workflow_stages
+                else None
+            ),
+            skill_invocation=(
+                SkillInvocation(**skill_invocation) if skill_invocation else None
+            ),
         )
 
     except HTTPException:
