@@ -52,6 +52,27 @@ _MOCK_BORROWER_RECORDS: list[dict[str, Any]] = [
     },
 ]
 
+_MOCK_LOAN_DOCUMENTS: list[dict[str, Any]] = [
+    {
+        "document_number": "1523",
+        "borrower_name": "Alice Morgan",
+        "employee_id": "EMP001",
+        "document_type": "Home equity loan intake packet",
+        "received_on": "2026-05-28",
+        "status": "Pending processing",
+        "pages": 14,
+    },
+    {
+        "document_number": "1488",
+        "borrower_name": "Brian Keller",
+        "employee_id": "EMP002",
+        "document_type": "Auto refinance disclosure set",
+        "received_on": "2026-05-21",
+        "status": "Awaiting review",
+        "pages": 9,
+    },
+]
+
 _MOCK_SUPPORT_CASES: list[dict[str, Any]] = [
     {
         "case_number": "CASE-240217",
@@ -148,6 +169,27 @@ def search_support_cases(query: str) -> list[dict[str, Any]]:
             matches.append(deepcopy(record))
 
     return matches or [deepcopy(_MOCK_SUPPORT_CASES[0])]
+
+
+def lookup_loan_document(query: str) -> dict[str, Any]:
+    text = (query or "").lower()
+    for record in _MOCK_LOAN_DOCUMENTS:
+        if record["document_number"] in text:
+            return deepcopy(record)
+
+    return deepcopy(_MOCK_LOAN_DOCUMENTS[0])
+
+
+def format_loan_document_record(record: dict[str, Any]) -> str:
+    return (
+        f"Document number: {record['document_number']}\n"
+        f"Borrower: {record['borrower_name']}\n"
+        f"Employee ID: {record['employee_id']}\n"
+        f"Document type: {record['document_type']}\n"
+        f"Received on: {record['received_on']}\n"
+        f"Status: {record['status']}\n"
+        f"Pages: {record['pages']}"
+    )
 
 
 def format_unmasked_borrower_record(record: dict[str, Any]) -> str:

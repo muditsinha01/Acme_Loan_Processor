@@ -4,7 +4,22 @@ import { useState, useRef, useEffect } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import { MessageList } from './MessageList'
 import { FileUpload } from './FileUpload'
+import { WorkflowStage } from './SkillWorkflowProgress'
+import {
+  buildSkillWorkflowStages,
+  extractDocumentNumber,
+  isLoanDocumentWorkflow,
+  runWorkflowStages,
+} from '../lib/skillWorkflow'
 import { ArrowUp, Loader2, Paperclip, Plus } from 'lucide-react'
+
+export interface SkillInvocationInfo {
+  id: string
+  name: string
+  version: string
+  description: string
+  status: string
+}
 
 export interface Message {
   id: string
@@ -13,6 +28,10 @@ export interface Message {
   timestamp: Date
   attachments?: FileAttachment[]
   error?: PolicyError
+  kind?: 'text' | 'skill_workflow'
+  workflowStages?: WorkflowStage[]
+  workflowComplete?: boolean
+  skillInvocation?: SkillInvocationInfo
 }
 
 export interface FileAttachment {
@@ -53,6 +72,7 @@ export function ChatInterface() {
 
     if (!input.trim() && pendingFiles.length === 0) return
 
+    const messageText = input
     const attachments: FileAttachment[] = []
     for (const file of pendingFiles) {
       const content = await readFileContent(file)
@@ -68,7 +88,7 @@ export function ChatInterface() {
     const userMessage: Message = {
       id: uuidv4(),
       role: 'user',
-      content: input || `Uploaded ${pendingFiles.length} file(s)`,
+      content: messageText || `Uploaded ${pendingFiles.length} file(s)`,
       timestamp: new Date(),
       attachments: attachments.length > 0 ? attachments : undefined,
     }
@@ -79,48 +99,155 @@ export function ChatInterface() {
     setShowFileUpload(false)
     setIsLoading(true)
 
+    const skillWorkflow = isLoanDocumentWorkflow(messageText)
+    const workflowMessageId = uuidv4()
+
+    if (skillWorkflow) {
+      const documentNumber = extractDocumentNumber(messageText)
+      const initialStages = buildSkillWorkflowStages(documentNumber)
+
+      setMessages(prev => [
+        ...prev,
+        {
+          id: workflowMessageId,
+          role: 'assistant',
+          content: '',
+          timestamp: new Date(),
+          kind: 'skill_workflow',
+          workflowStages: initialStages,
+          workflowComplete: false,
+          skillInvocation: {
+            id: 'loan-document-helper',
+            name: 'loan-document-helper',
+            version: '0.1.0',
+            description: 'Summarize loan documents and prepare borrower follow-up steps.',
+            status: 'loading',
+          },
+        },
+      ])
+    }
+
     try {
-      const response = await fetch('/api/backend/chat', {
+      const apiPromise = fetch('/api/backend/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          message: input,
+          message: messageText,
           attachments,
           conversation_id: uuidv4(),
         }),
-      })
+      }).then(async (response) => ({
+        response,
+        data: await response.json(),
+      }))
 
-      const data = await response.json()
+      if (skillWorkflow) {
+        const initialStages = buildSkillWorkflowStages(extractDocumentNumber(messageText))
 
-      if (!response.ok) {
-        // Handle policy violations returned as errors
-        const errorMessage: Message = {
-          id: uuidv4(),
-          role: 'assistant',
-          content: data.detail || 'An error occurred',
-          timestamp: new Date(),
-          error: data.policy_error ? {
-            type: data.policy_error.type,
-            message: data.policy_error.message,
-            details: data.policy_error.details,
-          } : undefined,
+        const [, apiResult] = await Promise.all([
+          runWorkflowStages(initialStages, (nextStages) => {
+            setMessages(prev =>
+              prev.map(message =>
+                message.id === workflowMessageId
+                  ? { ...message, workflowStages: nextStages }
+                  : message,
+              ),
+            )
+          }).then((completedStages) => {
+            setMessages(prev =>
+              prev.map(message =>
+                message.id === workflowMessageId
+                  ? {
+                      ...message,
+                      workflowStages: completedStages,
+                      workflowComplete: true,
+                      skillInvocation: message.skillInvocation
+                        ? { ...message.skillInvocation, status: 'loaded' }
+                        : message.skillInvocation,
+                    }
+                  : message,
+              ),
+            )
+          }),
+          apiPromise,
+        ])
+
+        const { response, data } = apiResult
+
+        if (!response.ok) {
+          const errorMessage: Message = {
+            id: uuidv4(),
+            role: 'assistant',
+            content: data.detail || 'An error occurred',
+            timestamp: new Date(),
+            error: data.policy_error ? {
+              type: data.policy_error.type,
+              message: data.policy_error.message,
+              details: data.policy_error.details,
+            } : undefined,
+          }
+          setMessages(prev => [...prev, errorMessage])
+        } else {
+          if (data.skill_invocation) {
+            setMessages(prev =>
+              prev.map(message =>
+                message.id === workflowMessageId
+                  ? {
+                      ...message,
+                      skillInvocation: data.skill_invocation,
+                    }
+                  : message,
+              ),
+            )
+          }
+
+          setMessages(prev => [
+            ...prev,
+            {
+              id: uuidv4(),
+              role: 'assistant',
+              content: data.response,
+              timestamp: new Date(),
+              error: data.policy_warning ? {
+                type: data.policy_warning.type,
+                message: data.policy_warning.message,
+                details: data.policy_warning.details,
+              } : undefined,
+            },
+          ])
         }
-        setMessages(prev => [...prev, errorMessage])
       } else {
-        const assistantMessage: Message = {
-          id: uuidv4(),
-          role: 'assistant',
-          content: data.response,
-          timestamp: new Date(),
-          error: data.policy_warning ? {
-            type: data.policy_warning.type,
-            message: data.policy_warning.message,
-            details: data.policy_warning.details,
-          } : undefined,
+        const { response, data } = await apiPromise
+
+        if (!response.ok) {
+          const errorMessage: Message = {
+            id: uuidv4(),
+            role: 'assistant',
+            content: data.detail || 'An error occurred',
+            timestamp: new Date(),
+            error: data.policy_error ? {
+              type: data.policy_error.type,
+              message: data.policy_error.message,
+              details: data.policy_error.details,
+            } : undefined,
+          }
+          setMessages(prev => [...prev, errorMessage])
+        } else {
+          const assistantMessage: Message = {
+            id: uuidv4(),
+            role: 'assistant',
+            content: data.response,
+            timestamp: new Date(),
+            error: data.policy_warning ? {
+              type: data.policy_warning.type,
+              message: data.policy_warning.message,
+              details: data.policy_warning.details,
+            } : undefined,
+          }
+          setMessages(prev => [...prev, assistantMessage])
         }
-        setMessages(prev => [...prev, assistantMessage])
       }
     } catch (error) {
       const errorMessage: Message = {
@@ -200,6 +327,13 @@ export function ChatInterface() {
       label: 'Escalate support case',
       action: () => {
         setInput('Escalate issue CASE-240217 for Alice Morgan')
+        inputRef.current?.focus()
+      },
+    },
+    {
+      label: 'Process loan document',
+      action: () => {
+        setInput('Process my loan document, document number 1523')
         inputRef.current?.focus()
       },
     },

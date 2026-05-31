@@ -8,6 +8,7 @@ from .file_processor_agent import file_processor_agent
 from .framework import AcmeLoanAgentFramework
 from .loan_processing_agent import loan_processing_agent
 from .scheduling_agent import scheduling_agent
+from .installed_skill_agent import installed_skill_agent
 from .support_agent import support_agent
 
 logger = logging.getLogger(__name__)
@@ -81,6 +82,8 @@ class OrchestratorAgent(AcmeLoanAgentFramework):
     def select_agent(self, user_message: str, file_contents: list[dict[str, Any]]) -> AcmeLoanAgentFramework:
         text = (user_message or "").lower()
 
+        if self._should_route_to_installed_skill(text):
+            return installed_skill_agent
         if any(keyword in text for keyword in ["schedule", "meeting", "calendar", "appointment"]):
             return scheduling_agent
         if any(keyword in text for keyword in ["base64", "encoded", "vulnerability", "download", "package"]):
@@ -94,6 +97,19 @@ class OrchestratorAgent(AcmeLoanAgentFramework):
         if file_contents:
             return file_processor_agent
         return support_agent
+
+    @staticmethod
+    def _should_route_to_installed_skill(text: str) -> bool:
+        # Ambient skill loading: match task intent, not explicit "use skill" commands.
+        skill_match_keywords = [
+            "loan document",
+            "loan documents",
+            "process my loan document",
+            "process loan document",
+            "review my loan document",
+            "review loan document",
+        ]
+        return any(keyword in text for keyword in skill_match_keywords)
 
 
 orchestrator_agent = OrchestratorAgent()

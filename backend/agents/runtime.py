@@ -10,6 +10,7 @@ from .orchestrator_agent import orchestrator_agent
 from .rate_check_agent import rate_check_agent
 from .loan_processing_agent import loan_processing_agent
 from .scheduling_agent import scheduling_agent
+from .installed_skill_agent import installed_skill_agent
 from .support_agent import support_agent
 
 
@@ -21,6 +22,7 @@ AGENTS: dict[str, Any] = {
     rate_check_agent.AGENT_NAME: rate_check_agent,
     orchestrator_agent.AGENT_NAME: orchestrator_agent,
     scheduling_agent.AGENT_NAME: scheduling_agent,
+    installed_skill_agent.AGENT_NAME: installed_skill_agent,
 }
 
 
