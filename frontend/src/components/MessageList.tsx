@@ -73,8 +73,10 @@ export function MessageList({ messages }: MessageListProps) {
                 <SkillWorkflowProgress
                   stages={message.workflowStages}
                   skillName={message.skillInvocation?.name}
+                  skillVersion={message.skillInvocation?.version}
                   skillDescription={message.skillInvocation?.description}
                   isComplete={message.workflowComplete}
+                  workflowStatus={message.workflowStatus}
                 />
               ) : (
                   <div className="message-content whitespace-pre-wrap text-sm sm:text-[15px]">{message.content}</div>

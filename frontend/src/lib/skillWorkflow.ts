@@ -17,7 +17,10 @@ export function extractDocumentNumber(message: string): string {
   return match?.[1] ?? '1523'
 }
 
-export function buildSkillWorkflowStages(documentNumber: string): WorkflowStage[] {
+export function buildSkillWorkflowStages(
+  documentNumber: string,
+  skillLabel = 'registered skill',
+): WorkflowStage[] {
   return [
     {
       id: 'document_lookup',
@@ -33,7 +36,7 @@ export function buildSkillWorkflowStages(documentNumber: string): WorkflowStage[
     },
     {
       id: 'skill_pull',
-      label: 'Pulling skill: loan-document-helper v0.1.0',
+      label: `Pulling skill: ${skillLabel}`,
       duration_ms: 2400,
       status: 'pending',
     },
@@ -56,17 +59,58 @@ export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+export function applyBackendWorkflowStages(
+  stages: WorkflowStage[],
+  backendStages: Array<{ id: string; label?: string; status?: string }>,
+): WorkflowStage[] {
+  const statusById = new Map(
+    backendStages.map((stage) => [stage.id, stage.status as WorkflowStage['status']]),
+  )
+  const labelById = new Map(
+    backendStages
+      .filter((stage) => stage.label)
+      .map((stage) => [stage.id, stage.label as string]),
+  )
+
+  return stages.map((stage) => ({
+    ...stage,
+    label: labelById.get(stage.id) ?? stage.label,
+    status: statusById.get(stage.id) ?? stage.status,
+  }))
+}
+
 export async function runWorkflowStages(
   stages: WorkflowStage[],
   onUpdate: (nextStages: WorkflowStage[]) => void,
+  options?: {
+    stopWhen?: () => boolean
+    onStop?: (stages: WorkflowStage[]) => WorkflowStage[]
+  },
 ): Promise<WorkflowStage[]> {
   const completedStages = stages.map((stage) => ({ ...stage }))
 
   for (let index = 0; index < completedStages.length; index += 1) {
+    if (options?.stopWhen?.()) {
+      const stoppedStages = options.onStop?.(completedStages) ?? completedStages
+      onUpdate(stoppedStages.map((stage) => ({ ...stage })))
+      return stoppedStages
+    }
+
+    const currentStatus = completedStages[index].status
+    if (currentStatus === 'failed' || currentStatus === 'complete') {
+      continue
+    }
+
     completedStages[index] = { ...completedStages[index], status: 'active' }
     onUpdate(completedStages.map((stage) => ({ ...stage })))
 
     await sleep(completedStages[index].duration_ms)
+
+    if (options?.stopWhen?.()) {
+      const stoppedStages = options.onStop?.(completedStages) ?? completedStages
+      onUpdate(stoppedStages.map((stage) => ({ ...stage })))
+      return stoppedStages
+    }
 
     completedStages[index] = { ...completedStages[index], status: 'complete' }
     onUpdate(completedStages.map((stage) => ({ ...stage })))

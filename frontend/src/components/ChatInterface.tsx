@@ -6,6 +6,7 @@ import { MessageList } from './MessageList'
 import { FileUpload } from './FileUpload'
 import { WorkflowStage } from './SkillWorkflowProgress'
 import {
+  applyBackendWorkflowStages,
   buildSkillWorkflowStages,
   extractDocumentNumber,
   isLoanDocumentWorkflow,
@@ -31,6 +32,7 @@ export interface Message {
   kind?: 'text' | 'skill_workflow'
   workflowStages?: WorkflowStage[]
   workflowComplete?: boolean
+  workflowStatus?: string
   skillInvocation?: SkillInvocationInfo
 }
 
@@ -117,10 +119,10 @@ export function ChatInterface() {
           workflowStages: initialStages,
           workflowComplete: false,
           skillInvocation: {
-            id: 'loan-document-helper',
-            name: 'loan-document-helper',
+            id: 'skill-audit-service',
+            name: 'skill-audit-service',
             version: '0.1.0',
-            description: 'Summarize loan documents and prepare borrower follow-up steps.',
+            description: 'Waiting for installed skill registry...',
             status: 'loading',
           },
         },
@@ -128,6 +130,8 @@ export function ChatInterface() {
     }
 
     try {
+      let apiResult: { response: Response; data: Record<string, unknown> } | null = null
+
       const apiPromise = fetch('/api/backend/chat', {
         method: 'POST',
         headers: {
@@ -138,43 +142,77 @@ export function ChatInterface() {
           attachments,
           conversation_id: uuidv4(),
         }),
-      }).then(async (response) => ({
-        response,
-        data: await response.json(),
-      }))
+      }).then(async (response) => {
+        const result = {
+          response,
+          data: await response.json() as Record<string, unknown>,
+        }
+        apiResult = result
+        return result
+      })
 
       if (skillWorkflow) {
-        const initialStages = buildSkillWorkflowStages(extractDocumentNumber(messageText))
+        const documentNumber = extractDocumentNumber(messageText)
+        const initialStages = buildSkillWorkflowStages(documentNumber)
 
-        const [, apiResult] = await Promise.all([
-          runWorkflowStages(initialStages, (nextStages) => {
-            setMessages(prev =>
-              prev.map(message =>
-                message.id === workflowMessageId
-                  ? { ...message, workflowStages: nextStages }
-                  : message,
-              ),
-            )
-          }).then((completedStages) => {
-            setMessages(prev =>
-              prev.map(message =>
-                message.id === workflowMessageId
-                  ? {
-                      ...message,
-                      workflowStages: completedStages,
-                      workflowComplete: true,
-                      skillInvocation: message.skillInvocation
-                        ? { ...message.skillInvocation, status: 'loaded' }
-                        : message.skillInvocation,
-                    }
-                  : message,
-              ),
-            )
-          }),
+        const [completedStages, apiResultFromPromise] = await Promise.all([
+          runWorkflowStages(
+            initialStages,
+            (nextStages) => {
+              setMessages(prev =>
+                prev.map(message =>
+                  message.id === workflowMessageId
+                    ? { ...message, workflowStages: nextStages }
+                    : message,
+                ),
+              )
+            },
+            {
+              stopWhen: () => apiResult?.data?.workflow_status === 'skill_blocked',
+              onStop: (stages) => {
+                const backendStages = apiResult?.data?.workflow_stages as
+                  | Array<{ id: string; label?: string; status?: string }>
+                  | undefined
+                if (!backendStages) {
+                  return stages
+                }
+                return applyBackendWorkflowStages(stages, backendStages)
+              },
+            },
+          ),
           apiPromise,
         ])
 
-        const { response, data } = apiResult
+        const { response, data } = apiResultFromPromise
+        const workflowStatus = data.workflow_status as string | undefined
+        const backendStages = data.workflow_stages as
+          | Array<{ id: string; label?: string; status?: string }>
+          | undefined
+        const finalStages = backendStages
+          ? applyBackendWorkflowStages(completedStages, backendStages)
+          : completedStages
+        const skillBlocked = workflowStatus === 'skill_blocked'
+
+        setMessages(prev =>
+          prev.map(message =>
+            message.id === workflowMessageId
+              ? {
+                  ...message,
+                  workflowStages: finalStages,
+                  workflowComplete: true,
+                  workflowStatus,
+                  skillInvocation: data.skill_invocation
+                    ? (data.skill_invocation as SkillInvocationInfo)
+                    : message.skillInvocation
+                      ? {
+                          ...message.skillInvocation,
+                          status: skillBlocked ? 'blocked' : 'loaded',
+                        }
+                      : message.skillInvocation,
+                }
+              : message,
+          ),
+        )
 
         if (!response.ok) {
           const errorMessage: Message = {
