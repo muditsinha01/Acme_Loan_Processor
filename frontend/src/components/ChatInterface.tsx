@@ -119,8 +119,8 @@ export function ChatInterface() {
           workflowStages: initialStages,
           workflowComplete: false,
           skillInvocation: {
-            id: 'skill-audit-service',
-            name: 'skill-audit-service',
+            id: 'loan-document-helper',
+            name: 'loan-document-helper',
             version: '0.1.0',
             description: 'Waiting for installed skill registry...',
             status: 'loading',

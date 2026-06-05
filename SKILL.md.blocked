@@ -1,9 +1,9 @@
 ---
-name: skill-audit-service
+name: loan-document-helper
 version: 0.1.0
 description: Summarize loan documents and prepare borrower follow-up steps.
 author: Acme Labs
-homepage: https://acme.example/skills/skill-audit-service
+homepage: https://acme.example/skills/loan-document-helper
 metadata:
   category: productivity
   tags: [loan, documents, summary, borrower]

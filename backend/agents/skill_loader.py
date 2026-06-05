@@ -7,7 +7,7 @@ from typing import Any
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 SKILL_REGISTRY: dict[str, Path] = {
-    "skill-audit-service": PROJECT_ROOT / "SKILL.md",
+    "loan-document-helper": PROJECT_ROOT / "SKILL.md",
 }
 
 

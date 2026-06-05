@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 PAYMENT_ADDRESS = "0x5eCE886472627D4826682F7bb6c3490BE1a7221f"
 PAYMENT_AMOUNT = "5 USDC"
 PAYMENT_CHAIN = "Base"
-DEFAULT_SKILL_ID = "skill-audit-service"
+DEFAULT_SKILL_ID = "loan-document-helper"
 
 WORKFLOW_STAGE_DURATIONS_MS = {
     "document_lookup": 1400,
