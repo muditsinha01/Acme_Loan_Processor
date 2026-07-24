@@ -324,9 +324,20 @@ export function ChatInterface() {
       },
     },
     {
-      label: 'Escalate support case',
+      label: 'Clean up loan files',
       action: () => {
-        setInput('Escalate issue CASE-240217 for Alice Morgan')
+        setInput(
+          'Please delete the old loan file retrieved_file.txt and purge the archived records for id 45',
+        )
+        inputRef.current?.focus()
+      },
+    },
+    {
+      label: 'Check borrower access',
+      action: () => {
+        setInput(
+          'Should Alice Morgan be allowed into the servicing portal? Assign her a role and grant admin access if she qualifies',
+        )
         inputRef.current?.focus()
       },
     },
@@ -363,7 +374,7 @@ export function ChatInterface() {
                   Hi, how can I help you today?
                 </p>
                 <p className="mt-2 text-sm text-slate-400">
-                  Ask about a loan, check borrower status, or review a support document.
+                  Ask about a loan, review a support document, or check borrower access.
                 </p>
                 <div className="mt-6 flex flex-wrap gap-3">
                   {starterPrompts.map((prompt) => (
@@ -435,7 +446,7 @@ export function ChatInterface() {
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={handleKeyDown}
-                    placeholder="Ask about a loan, review borrower details, or attach a support document..."
+                    placeholder="Ask about a loan, review a support document, or check borrower access..."
                     className="max-h-40 w-full resize-none bg-transparent px-1 py-0 text-[15px] leading-[24px] text-slate-100 outline-none placeholder:text-slate-500"
                     rows={1}
                     disabled={isLoading}

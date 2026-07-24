@@ -133,7 +133,8 @@ Acme_Loan_Processor/
 │   │   ├── orchestrator_agent.py
 │   │   ├── loan_processing_agent.py
 │   │   ├── file_processor_agent.py
-│   │   ├── support_agent.py
+│   │   ├── file_management_agent.py  # ⚠️ Destructive ops without HITL
+│   │   ├── access_control_agent.py   # ⚠️ LLM-driven security decisions
 │   │   ├── credit_eval_agent.py
 │   │   ├── scheduling_agent.py
 │   │   ├── runtime.py           # Thin registry over the agent files
@@ -204,6 +205,8 @@ cd frontend && npm audit
 | **Data Security** | PII in uploaded files | `backend/agents/file_processor_agent.py` | `backend/policies/pii_detection.py` |
 | **AI Threats** | Hidden prompts / Prompt injection | `backend/agents/credit_eval_agent.py` | `backend/policies/prompt_injection.py` |
 | **Identity & Access** | Unauthenticated agent calls | `backend/agents/orchestrator_agent.py` | `backend/agents/auth/agent_auth.py` |
+| **AI Threats** | Destructive ops without HITL | `backend/agents/file_management_agent.py` | *(HITL boolean gate)* |
+| **AI Threats** | LLM output drives security decisions | `backend/agents/access_control_agent.py` | *(HITL + allowlist gate)* |
 | **Vulnerability** | Vulnerable npm packages | `frontend/package.json` | *(version update)* |
 | **Vulnerability** | Vulnerable Python packages | `backend/requirements.txt` | *(version update)* |
 
@@ -230,12 +233,12 @@ python scripts/create_test_files.py
                             ▼
 ┌──────────────────────────────────────────────────────────────────────┐
 │                         Orchestrator Agent                           │
-│  ┌───────────────┐ ┌──────────────┐ ┌──────────────┐ ┌────────────┐ │
-│  │ Loan Processing│ │ File Processor│ │ Support Agent│ │ Credit Eval│ │
-│  └───────────────┘ └──────────────┘ └──────────────┘ └────────────┘ │
-│                     ┌──────────────────────────────┐                 │
-│                     │      Scheduling Agent        │                 │
-│                     └──────────────────────────────┘                 │
+│  ┌───────────────┐ ┌──────────────┐ ┌───────────┐ ┌────────────┐   │
+│  │ Loan Processing│ │ File Processor│ │ File Mgmt │ │ Credit Eval│   │
+│  └───────────────┘ └──────────────┘ └───────────┘ └────────────┘   │
+│          ┌────────────────────┐  ┌──────────────────────────┐      │
+│          │ Access Control Agent│  │    Scheduling Agent     │      │
+│          └────────────────────┘  └──────────────────────────┘      │
 └──────────────────────────────────────────────────────────────────────┘
                                │
                ┌───────────────┼────────────────┬─────────────────────┐

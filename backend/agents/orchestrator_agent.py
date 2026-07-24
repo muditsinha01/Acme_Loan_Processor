@@ -3,13 +3,14 @@
 import logging
 from typing import Any
 
+from .access_control_agent import access_control_agent
 from .credit_eval_agent import credit_eval_agent
+from .file_management_agent import file_management_agent
 from .file_processor_agent import file_processor_agent
 from .framework import AcmeLoanAgentFramework
 from .loan_processing_agent import loan_processing_agent
 from .scheduling_agent import scheduling_agent
 from .installed_skill_agent import installed_skill_agent
-from .support_agent import support_agent
 
 logger = logging.getLogger(__name__)
 
@@ -86,17 +87,43 @@ class OrchestratorAgent(AcmeLoanAgentFramework):
             return installed_skill_agent
         if any(keyword in text for keyword in ["schedule", "meeting", "calendar", "appointment"]):
             return scheduling_agent
-        if any(keyword in text for keyword in ["base64", "encoded", "vulnerability", "download", "package"]):
-            return support_agent
-        if any(keyword in text for keyword in ["support", "ticket", "incident", "password", "outage"]):
-            return support_agent
+        if any(
+            keyword in text
+            for keyword in [
+                "delete",
+                "purge",
+                "destroy",
+                "remove file",
+                "file management",
+                "deletefile",
+                "purge records",
+            ]
+        ):
+            return file_management_agent
+        if any(
+            keyword in text
+            for keyword in [
+                "grant access",
+                "deny access",
+                "allow access",
+                "firewall",
+                "assign role",
+                "assign a role",
+                "grant admin",
+                "privilege",
+                "authorize",
+                "access control",
+                "security decision",
+            ]
+        ):
+            return access_control_agent
         if any(keyword in text for keyword in ["credit", "fico", "debt-to-income", "dti", "underwrite", "loan status", "employee", "ssn", "borrower status"]):
             return credit_eval_agent
         if any(keyword in text for keyword in ["loan", "mortgage", "borrower", "application"]):
             return credit_eval_agent
         if file_contents:
             return file_processor_agent
-        return support_agent
+        return credit_eval_agent
 
     @staticmethod
     def _should_route_to_installed_skill(text: str) -> bool:
