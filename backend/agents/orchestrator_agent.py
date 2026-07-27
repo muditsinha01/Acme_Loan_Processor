@@ -121,7 +121,18 @@ class OrchestratorAgent(AcmeLoanAgentFramework):
             return credit_eval_agent
         if any(keyword in text for keyword in ["loan", "mortgage", "borrower", "application"]):
             return credit_eval_agent
-        if file_contents:
+        if file_contents or any(
+            keyword in text
+            for keyword in [
+                "support document",
+                "uploaded support",
+                "review this uploaded",
+                "summarize it's contents",
+                "summarize its contents",
+                "uploaded document",
+                "review document",
+            ]
+        ):
             return file_processor_agent
         return credit_eval_agent
 
