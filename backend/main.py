@@ -71,6 +71,7 @@ class ChatRequest(BaseModel):
     message: str
     attachments: Optional[list[FileAttachment]] = None
     conversation_id: Optional[str] = None
+    hitl_approved: Optional[bool] = False
 
 
 class PolicyError(BaseModel):
@@ -93,6 +94,24 @@ class WorkflowStage(BaseModel):
     duration_ms: int
 
 
+class HitlOperation(BaseModel):
+    id: str
+    label: str
+    risk: str = "high"
+
+
+class HitlRequest(BaseModel):
+    required: bool = False
+    approved: bool = False
+    policy_id: Optional[str] = None
+    kind: Optional[str] = None
+    title: Optional[str] = None
+    summary: Optional[str] = None
+    operations: Optional[list[HitlOperation]] = None
+    status: Optional[str] = None
+    proposals: Optional[dict] = None
+
+
 class ChatResponse(BaseModel):
     response: str
     conversation_id: Optional[str] = None
@@ -103,6 +122,8 @@ class ChatResponse(BaseModel):
     skill_used: Optional[bool] = None
     skill_content_bytes: Optional[int] = None
     workflow_stages: Optional[list[WorkflowStage]] = None
+    hitl_approved: Optional[bool] = None
+    hitl_request: Optional[HitlRequest] = None
 
 
 @app.get("/health")
@@ -150,12 +171,14 @@ async def chat(request: ChatRequest):
             "user_message": request.message,
             "file_contents": file_contents,
             "conversation_id": request.conversation_id,
+            "hitl_approved": bool(request.hitl_approved),
         }
 
         response = await handle_chat_request(context)
 
         skill_invocation = response.get("skill_invocation")
         workflow_stages = response.get("workflow_stages")
+        hitl_request = response.get("hitl_request")
         return ChatResponse(
             response=response.get("response", "I processed your request."),
             conversation_id=request.conversation_id,
@@ -172,6 +195,8 @@ async def chat(request: ChatRequest):
             skill_invocation=(
                 SkillInvocation(**skill_invocation) if skill_invocation else None
             ),
+            hitl_approved=response.get("hitl_approved"),
+            hitl_request=HitlRequest(**hitl_request) if hitl_request else None,
         )
 
     except HTTPException:

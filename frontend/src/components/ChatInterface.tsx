@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { MessageList } from './MessageList'
 import { FileUpload } from './FileUpload'
 import { WorkflowStage } from './SkillWorkflowProgress'
+import { HitlRequestInfo } from './HitlApprovalCard'
 import {
   buildSkillWorkflowStages,
   extractDocumentNumber,
@@ -28,11 +29,15 @@ export interface Message {
   timestamp: Date
   attachments?: FileAttachment[]
   error?: PolicyError
-  kind?: 'text' | 'skill_workflow'
+  kind?: 'text' | 'skill_workflow' | 'hitl_approval'
   workflowStages?: WorkflowStage[]
   workflowComplete?: boolean
   skillInvocation?: SkillInvocationInfo
+  hitlRequest?: HitlRequestInfo
+  originalUserMessage?: string
+  hitlDecision?: 'pending' | 'approved' | 'rejected'
 }
+
 
 export interface FileAttachment {
   id: string
@@ -52,6 +57,7 @@ export function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [hitlSubmittingId, setHitlSubmittingId] = useState<string | null>(null)
   const [pendingFiles, setPendingFiles] = useState<File[]>([])
   const [showFileUpload, setShowFileUpload] = useState(false)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -65,7 +71,116 @@ export function ChatInterface() {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, isLoading, showFileUpload])
+  }, [messages, isLoading, showFileUpload, hitlSubmittingId])
+
+  const buildAssistantMessage = (data: Record<string, unknown>, originalMessage: string): Message => {
+    const hitlRequest = data.hitl_request as HitlRequestInfo | undefined
+    const needsHitl = Boolean(hitlRequest?.required && !hitlRequest?.approved)
+
+    return {
+      id: uuidv4(),
+      role: 'assistant',
+      content: String(data.response || ''),
+      timestamp: new Date(),
+      kind: needsHitl ? 'hitl_approval' : 'text',
+      hitlRequest,
+      originalUserMessage: originalMessage,
+      hitlDecision: needsHitl ? 'pending' : hitlRequest?.approved ? 'approved' : undefined,
+      error: data.policy_warning
+        ? {
+            type: (data.policy_warning as PolicyError).type,
+            message: (data.policy_warning as PolicyError).message,
+            details: (data.policy_warning as PolicyError).details,
+          }
+        : undefined,
+    }
+  }
+
+  const sendChatRequest = async (messageText: string, hitlApproved = false) => {
+    const response = await fetch('/api/backend/chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        message: messageText,
+        attachments: [],
+        conversation_id: uuidv4(),
+        hitl_approved: hitlApproved,
+      }),
+    })
+    const data = await response.json()
+    return { response, data }
+  }
+
+  const handleHitlApprove = async (message: Message) => {
+    if (!message.originalUserMessage || hitlSubmittingId) return
+
+    setHitlSubmittingId(message.id)
+    setIsLoading(true)
+    try {
+      const { response, data } = await sendChatRequest(message.originalUserMessage, true)
+      if (!response.ok) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: uuidv4(),
+            role: 'assistant',
+            content: data.detail || 'Approval request failed',
+            timestamp: new Date(),
+          },
+        ])
+        return
+      }
+
+      setMessages((prev) =>
+        prev.map((item) =>
+          item.id === message.id
+            ? {
+                ...item,
+                hitlDecision: 'approved',
+                hitlRequest: item.hitlRequest
+                  ? { ...item.hitlRequest, required: false, approved: true, status: 'approved' }
+                  : item.hitlRequest,
+              }
+            : item,
+        ),
+      )
+      setMessages((prev) => [...prev, buildAssistantMessage(data, message.originalUserMessage || '')])
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: uuidv4(),
+          role: 'assistant',
+          content: 'Failed to apply approved request. Please ensure the server is running.',
+          timestamp: new Date(),
+        },
+      ])
+    } finally {
+      setHitlSubmittingId(null)
+      setIsLoading(false)
+    }
+  }
+
+  const handleHitlReject = (message: Message) => {
+    setMessages((prev) =>
+      prev.map((item) =>
+        item.id === message.id
+          ? {
+              ...item,
+              hitlDecision: 'rejected',
+              content:
+                item.content +
+                '\n\nHuman rejected this request. No destructive or security-sensitive actions were applied.',
+              hitlRequest: item.hitlRequest
+                ? { ...item.hitlRequest, required: false, approved: false, status: 'rejected' }
+                : item.hitlRequest,
+            }
+          : item,
+      ),
+    )
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -137,6 +252,7 @@ export function ChatInterface() {
           message: messageText,
           attachments,
           conversation_id: uuidv4(),
+          hitl_approved: false,
         }),
       }).then(async (response) => ({
         response,
@@ -203,20 +319,7 @@ export function ChatInterface() {
             )
           }
 
-          setMessages(prev => [
-            ...prev,
-            {
-              id: uuidv4(),
-              role: 'assistant',
-              content: data.response,
-              timestamp: new Date(),
-              error: data.policy_warning ? {
-                type: data.policy_warning.type,
-                message: data.policy_warning.message,
-                details: data.policy_warning.details,
-              } : undefined,
-            },
-          ])
+          setMessages(prev => [...prev, buildAssistantMessage(data, messageText)])
         }
       } else {
         const { response, data } = await apiPromise
@@ -235,18 +338,7 @@ export function ChatInterface() {
           }
           setMessages(prev => [...prev, errorMessage])
         } else {
-          const assistantMessage: Message = {
-            id: uuidv4(),
-            role: 'assistant',
-            content: data.response,
-            timestamp: new Date(),
-            error: data.policy_warning ? {
-              type: data.policy_warning.type,
-              message: data.policy_warning.message,
-              details: data.policy_warning.details,
-            } : undefined,
-          }
-          setMessages(prev => [...prev, assistantMessage])
+          setMessages(prev => [...prev, buildAssistantMessage(data, messageText)])
         }
       }
     } catch (error) {
@@ -324,9 +416,20 @@ export function ChatInterface() {
       },
     },
     {
-      label: 'Escalate support case',
+      label: 'Clean up loan files',
       action: () => {
-        setInput('Escalate issue CASE-240217 for Alice Morgan')
+        setInput(
+          'Please delete the old loan file retrieved_file.txt and purge the archived records for id 45',
+        )
+        inputRef.current?.focus()
+      },
+    },
+    {
+      label: 'Check borrower access',
+      action: () => {
+        setInput(
+          'Should Alice Morgan be allowed into the servicing portal? Assign her a role and grant admin access if she qualifies',
+        )
         inputRef.current?.focus()
       },
     },
@@ -381,7 +484,12 @@ export function ChatInterface() {
             </div>
           ) : (
             <>
-              <MessageList messages={messages} />
+              <MessageList
+                messages={messages}
+                hitlSubmittingId={hitlSubmittingId}
+                onHitlApprove={handleHitlApprove}
+                onHitlReject={handleHitlReject}
+              />
               <div ref={messagesEndRef} />
             </>
           )}

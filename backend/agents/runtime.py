@@ -3,20 +3,22 @@
 from copy import deepcopy
 from typing import Any
 
+from .access_control_agent import access_control_agent
 from .credit_eval_agent import credit_eval_agent
+from .file_management_agent import file_management_agent
 from .file_processor_agent import file_processor_agent
 from .mcp_servers import MCP_SERVERS
 from .orchestrator_agent import orchestrator_agent
 from .loan_processing_agent import loan_processing_agent
 from .scheduling_agent import scheduling_agent
 from .installed_skill_agent import installed_skill_agent
-from .support_agent import support_agent
 
 
 AGENTS: dict[str, Any] = {
     loan_processing_agent.AGENT_NAME: loan_processing_agent,
     file_processor_agent.AGENT_NAME: file_processor_agent,
-    support_agent.AGENT_NAME: support_agent,
+    file_management_agent.AGENT_NAME: file_management_agent,
+    access_control_agent.AGENT_NAME: access_control_agent,
     credit_eval_agent.AGENT_NAME: credit_eval_agent,
     orchestrator_agent.AGENT_NAME: orchestrator_agent,
     scheduling_agent.AGENT_NAME: scheduling_agent,

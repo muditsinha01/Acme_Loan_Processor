@@ -2,14 +2,23 @@
 
 import { Message } from './ChatInterface'
 import { ErrorDisplay } from './ErrorDisplay'
+import { HitlApprovalCard } from './HitlApprovalCard'
 import { SkillWorkflowProgress } from './SkillWorkflowProgress'
 import { Paperclip } from 'lucide-react'
 
 interface MessageListProps {
   messages: Message[]
+  hitlSubmittingId?: string | null
+  onHitlApprove?: (message: Message) => void
+  onHitlReject?: (message: Message) => void
 }
 
-export function MessageList({ messages }: MessageListProps) {
+export function MessageList({
+  messages,
+  hitlSubmittingId = null,
+  onHitlApprove,
+  onHitlReject,
+}: MessageListProps) {
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-4">
       {messages.map((message) => (
@@ -76,6 +85,19 @@ export function MessageList({ messages }: MessageListProps) {
                   skillDescription={message.skillInvocation?.description}
                   isComplete={message.workflowComplete}
                 />
+              ) : message.kind === 'hitl_approval' && message.hitlRequest ? (
+                <div className="space-y-4">
+                  <div className="message-content whitespace-pre-wrap text-sm sm:text-[15px]">
+                    {message.content}
+                  </div>
+                  <HitlApprovalCard
+                    hitl={message.hitlRequest}
+                    originalMessage={message.originalUserMessage || ''}
+                    isSubmitting={hitlSubmittingId === message.id}
+                    onApprove={() => onHitlApprove?.(message)}
+                    onReject={() => onHitlReject?.(message)}
+                  />
+                </div>
               ) : (
                   <div className="message-content whitespace-pre-wrap text-sm sm:text-[15px]">{message.content}</div>
               )}
