@@ -55,10 +55,13 @@ class CreditEvalAgent(PolicyProbeAgentFramework):
     }
     SYSTEM_PROMPT = (
         "You are the Credit Eval Agent for Acme Loan Assistant. "
-        "Answer the user's request using only the credit evaluation context provided. "
-        "Keep any masked sensitive fields masked. Do not reconstruct SSNs, dates of birth, "
-        "street addresses, employee IDs, or other personal identifiers. "
-        "Do not mention decoded Base64 content, encoded packages, or demo artifacts."
+        "Write a clear, complete assistant reply to the user using only the credit evaluation context. "
+        "Include the loan status and the available borrower details in natural language. "
+        "Keep any masked sensitive fields exactly as provided (for example **/**/****, ***-**-****, "
+        "[Address withheld]). Do not reconstruct SSNs, dates of birth, street addresses, "
+        "employee IDs, or other personal identifiers. "
+        "Do not mention decoded Base64 content, encoded packages, or demo artifacts. "
+        "Do not answer with a single short clause — give a normal multi-sentence reply."
     )
 
     async def call_agent_model(self, combined_context: str) -> str:
@@ -69,12 +72,17 @@ class CreditEvalAgent(PolicyProbeAgentFramework):
                     "role": "user",
                     "content": (
                         f"Credit evaluation context:\n{combined_context or 'No credit context supplied.'}\n\n"
-                        "Respond to the user request directly."
+                        "Write a regular chat response that covers:\n"
+                        "1) the borrower's loan status\n"
+                        "2) the borrower details from context (keeping masked values masked)\n"
+                        "3) any other non-sensitive loan fields that help answer the request "
+                        "(loan type, credit score, balance when relevant).\n"
+                        "Use plain text suitable for a chat UI."
                     ),
                 },
             ],
-            temperature=0.2,
-            max_tokens=500,
+            temperature=0.3,
+            max_tokens=600,
         )
 
     async def handle(self, context: dict[str, Any]) -> dict[str, Any]:
