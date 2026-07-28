@@ -24,7 +24,7 @@ Acme Loan Assistant is a deliberately vulnerable chat agent application designed
 
 ### Option A: Docker (recommended)
 
-**Prerequisites:** Docker, an AWS region with Bedrock enabled, and either an IAM role attached to the host (recommended for EC2) or AWS credentials
+**Prerequisites:** Docker and an [OpenRouter](https://openrouter.ai/keys) API key
 
 1. **Build the image**
 
@@ -38,8 +38,8 @@ docker build -t acme-loan-processor:local .
 docker run -d \
   --name acme-loan-processor \
   -p 80:5001 \
-  -e AWS_REGION=us-west-2 \
-  -e BEDROCK_MODEL_ID=amazon.nova-micro-v1:0 \
+  -e OPENROUTER_API_KEY=your_openrouter_api_key \
+  -e OPENROUTER_MODEL=meta-llama/llama-3.1-70b-instruct \
   -e AGENT_SECRET=your_random_secret \
   acme-loan-processor:local
 ```
@@ -54,8 +54,8 @@ docker run -d \
 
 - Node.js 18+
 - Python 3.10+
-- AWS credentials with Amazon Bedrock access
-- `AWS_REGION` or `AWS_DEFAULT_REGION`
+- OpenRouter API key (`OPENROUTER_API_KEY`)
+- OpenRouter model id (`OPENROUTER_MODEL`)
 
 ### Setup
 
@@ -66,7 +66,7 @@ cd Acme_Loan_Processor
 
 # Copy environment template
 cp .env.example .env
-# Edit .env and add your AWS Bedrock settings
+# Edit .env and add your OpenRouter settings
 ```
 
 2. **Create virtual environment and install dependencies**
@@ -259,19 +259,12 @@ python scripts/create_test_files.py
 
 | Variable | Description | Required | Default |
 |----------|-------------|----------|---------|
-| `AWS_REGION` | AWS region for Amazon Bedrock Runtime | Yes* | — |
-| `AWS_DEFAULT_REGION` | Alternate AWS region variable used by boto3 | No | — |
-| `AWS_ACCESS_KEY_ID` | AWS access key (not needed when using IAM role) | No | — |
-| `AWS_SECRET_ACCESS_KEY` | AWS secret key (not needed when using IAM role) | No | — |
-| `AWS_SESSION_TOKEN` | AWS session token for temporary credentials | No | — |
-| `AWS_PROFILE` | Named AWS profile for local development | No | — |
-| `BEDROCK_MODEL_ID` | Amazon Bedrock model ID to use | No | `amazon.nova-micro-v1:0` |
+| `OPENROUTER_API_KEY` | API key for OpenRouter chat completions | Yes | — |
+| `OPENROUTER_MODEL` | OpenRouter model id (e.g. `meta-llama/llama-3.1-70b-instruct`) | Yes | — |
 | `AGENT_SECRET` | Secret for HMAC inter-agent token signing | No | — |
 | `JWT_SECRET` | Secret for JWT signing (after Unifai remediation) | No | — |
 | `BACKEND_URL` | Backend URL for frontend proxy | No | `http://127.0.0.1:5500` |
 | `LOG_LEVEL` | Logging verbosity | No | `INFO` |
-
-\* Provide AWS credentials through environment variables, `AWS_PROFILE`, or another standard boto3 credential source.
 
 ## License
 
