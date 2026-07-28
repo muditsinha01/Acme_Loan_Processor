@@ -54,9 +54,10 @@ class BedrockClient:
         )
 
         if not (self.region or self.session.region_name):
-            logger.warning(
+            # Runtime LLM path uses OpenRouter; Bedrock is legacy/unused.
+            logger.debug(
                 "Amazon Bedrock region not configured. "
-                "Set AWS_REGION or AWS_DEFAULT_REGION."
+                "Runtime LLM calls use OPENROUTER_API_KEY / OPENROUTER_MODEL."
             )
 
     def _get_client(self):
