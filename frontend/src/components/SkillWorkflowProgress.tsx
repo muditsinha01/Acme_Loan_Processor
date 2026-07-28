@@ -59,14 +59,14 @@ export function SkillWorkflowProgress({
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium text-slate-100">
               {isBlocked
-                ? 'Skill workflow blocked'
+                ? 'Skill unavailable'
                 : isComplete
                   ? 'Skill workflow complete'
                   : activeStage?.label || 'Preparing skill workflow...'}
             </p>
             <p className="mt-1 text-xs text-slate-400">
               {isBlocked
-                ? 'The installed skill manifest is blocked and was not loaded or executed.'
+                ? 'The matched skill could not be loaded, so processing did not continue.'
                 : isComplete
                   ? 'Installed skill instructions were loaded and executed.'
                   : 'The assistant is resolving this task through the installed skills runtime.'}
@@ -88,7 +88,7 @@ export function SkillWorkflowProgress({
               isBlocked ? 'text-rose-200/80' : 'text-amber-200/80'
             }`}
           >
-            {isBlocked ? 'Skill blocked' : 'Pulling skill'}
+            {isBlocked ? 'Unavailable' : 'Pulling skill'}
           </p>
           <p className="mt-2 text-sm font-medium text-slate-100">
             {skillName || 'loan-document-helper'}

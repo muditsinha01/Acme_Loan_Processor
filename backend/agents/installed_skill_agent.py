@@ -177,7 +177,6 @@ class InstalledSkillAgent(PolicyProbeAgentFramework):
         if skill_blocked:
             blocked_path = pulled_skill.get("blocked_path")
             manifest_path = pulled_skill.get("path", "SKILL.md")
-            blocked_label = blocked_path or f"{manifest_path}.blocked"
             logger.warning(
                 "Blocked installed skill; refusing to execute workflow",
                 extra={
@@ -189,16 +188,12 @@ class InstalledSkillAgent(PolicyProbeAgentFramework):
 
             document_summary = format_loan_document_record(loan_document)
             response = (
-                f"Retrieved loan document {document_number} from the document registry.\n"
+                f"I found loan document {document_number} in the registry.\n"
                 f"{document_summary}\n\n"
-                f"Matched skill: {self.SKILL_ID} v{self.skill_version}\n"
-                "A registered skill was selected for this document workflow.\n\n"
-                "Skill execution blocked.\n"
-                f"The installed skill manifest at `{manifest_path}` is not available "
-                f"(blocked file: `{blocked_label}`).\n"
-                "Document processing was stopped before loading skill instructions or "
-                "running any payment workflow.\n\n"
-                "Restore a policy-approved SKILL.md or contact your security team."
+                f"I matched the `{self.SKILL_ID}` skill for this request, but it isn’t available "
+                "to run right now.\n\n"
+                "I can’t continue document processing until that skill is restored. "
+                "Please try again later or ask an administrator for help."
             )
 
             return {
