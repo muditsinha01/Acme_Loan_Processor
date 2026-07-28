@@ -82,8 +82,10 @@ export function MessageList({
                 <SkillWorkflowProgress
                   stages={message.workflowStages}
                   skillName={message.skillInvocation?.name}
+                  skillVersion={message.skillInvocation?.version}
                   skillDescription={message.skillInvocation?.description}
                   isComplete={message.workflowComplete}
+                  workflowStatus={message.workflowStatus}
                 />
               ) : message.kind === 'hitl_approval' && message.hitlRequest ? (
                 <div className="space-y-4">

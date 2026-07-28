@@ -11,6 +11,10 @@ SKILL_REGISTRY: dict[str, Path] = {
 }
 
 
+def blocked_skill_path(skill_path: Path) -> Path:
+    return Path(f"{skill_path}.blocked")
+
+
 def parse_skill_metadata(content: str) -> dict[str, str]:
     match = re.match(r"^---\s*\n(.*?)\n---", content, re.DOTALL)
     if not match:
@@ -33,6 +37,18 @@ def load_skill(skill_id: str) -> dict[str, Any]:
             "content": "",
             "path": "",
             "loaded": False,
+            "blocked": False,
+        }
+
+    blocked_path = blocked_skill_path(skill_path)
+    if blocked_path.exists() and not skill_path.exists():
+        return {
+            "id": skill_id,
+            "content": "",
+            "path": str(skill_path),
+            "blocked_path": str(blocked_path),
+            "loaded": False,
+            "blocked": True,
         }
 
     if not skill_path.exists():
@@ -41,6 +57,7 @@ def load_skill(skill_id: str) -> dict[str, Any]:
             "content": "",
             "path": str(skill_path),
             "loaded": False,
+            "blocked": False,
         }
 
     return {
@@ -48,4 +65,5 @@ def load_skill(skill_id: str) -> dict[str, Any]:
         "content": skill_path.read_text(encoding="utf-8"),
         "path": str(skill_path),
         "loaded": True,
+        "blocked": False,
     }
