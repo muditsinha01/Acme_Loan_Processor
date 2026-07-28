@@ -23,20 +23,22 @@ source "$PROJECT_ROOT/scripts/python_helper.sh"
 echo ""
 
 # Check for required environment variables
-if [ -z "$AWS_REGION" ] && [ -z "$AWS_DEFAULT_REGION" ]; then
-    echo "WARNING: AWS_REGION/AWS_DEFAULT_REGION not set"
-    echo "The LLM features will not work without an AWS region."
-    echo "Set it with: export AWS_REGION=us-west-2"
-    echo ""
+if [ -z "$OPENROUTER_API_KEY" ]; then
+    # Also accept values loaded later from .env by the backend process.
+    if [ ! -f "$PROJECT_ROOT/.env" ] || ! grep -q '^OPENROUTER_API_KEY=.\+' "$PROJECT_ROOT/.env"; then
+        echo "WARNING: OPENROUTER_API_KEY not set"
+        echo "The LLM features will not work without an OpenRouter API key."
+        echo "Set it in .env: OPENROUTER_API_KEY=..."
+        echo ""
+    fi
 fi
 
-if [ -z "$AWS_ACCESS_KEY_ID" ] && [ -z "$AWS_PROFILE" ] && [ ! -d "$HOME/.aws" ]; then
-    echo "WARNING: AWS credentials were not detected"
-    echo "The LLM features will not work without AWS credentials for Bedrock."
-    echo "Set them with your usual AWS auth flow, for example:"
-    echo "  export AWS_ACCESS_KEY_ID=your_access_key"
-    echo "  export AWS_SECRET_ACCESS_KEY=your_secret_key"
-    echo ""
+if [ -z "$OPENROUTER_MODEL" ]; then
+    if [ ! -f "$PROJECT_ROOT/.env" ] || ! grep -q '^OPENROUTER_MODEL=.\+' "$PROJECT_ROOT/.env"; then
+        echo "WARNING: OPENROUTER_MODEL not set"
+        echo "Set it in .env, for example: OPENROUTER_MODEL=meta-llama/llama-3.1-70b-instruct"
+        echo ""
+    fi
 fi
 
 # Function to cleanup background processes on exit
