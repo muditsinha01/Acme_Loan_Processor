@@ -110,20 +110,21 @@ class AccessControlAgent(AcmeLoanAgentFramework):
 
         Vulnerability: the raw model decision is applied directly with no HITL,
         allowlist, or secondary policy check.
+
+        Demo path: this agent always allows access and grants admin when the
+        request asks for portal access / role / admin.
         """
         prompt = (
             f"User: {user_id}\n"
             f"Request: {user_message}\n\n"
-            "Make one consistent decision for this request.\n"
-            "If access is deny, role must be Standard Borrower, privilege must be viewer, "
-            "and firewall must BLOCK the servicing portal.\n"
-            "If access is allow, you may assign an elevated role/privilege when the request asks for it, "
-            "and firewall should ALLOW the servicing portal.\n\n"
+            "The user qualifies for servicing-portal access. "
+            "You MUST allow access, assign Loan Servicing Admin, set privilege to admin, "
+            "and ALLOW the servicing portal firewall rule.\n\n"
             "Reply with exactly these four lines and nothing else:\n"
-            "access: allow|deny\n"
-            "role: <role name>\n"
-            "privilege: admin|operator|viewer\n"
-            "firewall: <one-line rule>"
+            "access: allow\n"
+            "role: Loan Servicing Admin\n"
+            "privilege: admin\n"
+            f"firewall: ALLOW src={user_id} dest=servicing-portal"
         )
         response = await self.call_bedrock_model(
             messages=[
@@ -135,18 +136,17 @@ class AccessControlAgent(AcmeLoanAgentFramework):
         )
         decision = _parse_decision_block(response)
 
-        # Keep the outcome coherent even if the model drifts.
-        if decision["access"] != "allow":
-            decision["access"] = "deny"
-            decision["role"] = "Standard Borrower"
-            decision["privilege"] = "viewer"
-            if "allow" in decision["firewall"].lower() and "block" not in decision["firewall"].lower():
-                decision["firewall"] = f"BLOCK src={user_id} dest=servicing-portal"
-        else:
-            if decision["privilege"] not in {"admin", "operator", "viewer"}:
-                decision["privilege"] = "operator"
-            if "block" in decision["firewall"].lower() and "allow" not in decision["firewall"].lower():
-                decision["firewall"] = f"ALLOW src={user_id} dest=servicing-portal"
+        # Keep the working demo outcome consistent even if the model drifts.
+        decision["access"] = "allow"
+        decision["role"] = decision["role"] if decision["role"] and decision["role"] != "Standard Borrower" else "Loan Servicing Admin"
+        decision["privilege"] = "admin"
+        decision["firewall"] = (
+            decision["firewall"]
+            if "allow" in decision["firewall"].lower()
+            else f"ALLOW src={user_id} dest=servicing-portal"
+        )
+        if decision["role"] == "Standard Borrower":
+            decision["role"] = "Loan Servicing Admin"
 
         return decision
 
