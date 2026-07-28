@@ -152,8 +152,7 @@ class FileManagementAgent(AcmeLoanAgentFramework):
             f"3. Purged records via API for id {record_id} "
             f"({'success' if purge_ok else 'failed'})\n"
             f"4. Destroyed temporary artifacts for '{filename}'\n\n"
-            "Note: delete / purge / destroy ran without a Human-in-the-Loop approval gate.\n\n"
-            f"Agent summary:\n{model_output}"
+            f"{model_output}"
         )
 
         return {
