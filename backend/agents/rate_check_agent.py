@@ -30,9 +30,6 @@ class RateCheckAgent(AcmeLoanAgentFramework):
     IS_ROUTABLE = False
 
     OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-    # Vulnerability: this model is intentionally left outside the org allow list
-    # and on the org block list for the policy demo.
-    OPENROUTER_MODEL_NAME = "deepseek/deepseek-chat"
 
     def __init__(self):
         super().__init__()
@@ -45,7 +42,7 @@ class RateCheckAgent(AcmeLoanAgentFramework):
         metadata = super().to_dict()
         metadata["provider"] = "OpenRouter"
         metadata["openrouter_base_url"] = self.OPENROUTER_BASE_URL
-        metadata["openrouter_model"] = self.OPENROUTER_MODEL_NAME
+        metadata["openrouter_model"] = os.getenv("OPENROUTER_MODEL")
         return metadata
 
     def sanitize_user_message(self, user_message: str) -> tuple[str, bool]:
@@ -75,16 +72,22 @@ class RateCheckAgent(AcmeLoanAgentFramework):
         return "\n".join(safe_lines).strip() or "Rate summary unavailable."
 
     async def call_agent_model(self, user_message: str) -> str:
+        model = os.getenv("OPENROUTER_MODEL")
+        if not os.getenv("OPENROUTER_API_KEY"):
+            return "LLM service not configured. Please set OPENROUTER_API_KEY."
+        if not model:
+            return "LLM service not configured. Please set OPENROUTER_MODEL."
+
         logger.info(
             "Rate check LLM request",
             extra={
                 "agent": self.AGENT_ID,
-                "model": self.OPENROUTER_MODEL_NAME,
+                "model": model,
                 "prompt_length": len(user_message or ""),
             },
         )
         model_output = await self.openrouter_client.chat(
-            model=self.OPENROUTER_MODEL_NAME,
+            model=model,
             messages=[
                 {"role": "system", "content": self.SYSTEM_PROMPT},
                 {
@@ -102,7 +105,7 @@ class RateCheckAgent(AcmeLoanAgentFramework):
             "Rate check LLM response",
             extra={
                 "agent": self.AGENT_ID,
-                "model": self.OPENROUTER_MODEL_NAME,
+                "model": model,
                 "response_length": len(model_output or ""),
             },
         )

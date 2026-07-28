@@ -5,7 +5,6 @@ from abc import ABC, abstractmethod
 from copy import deepcopy
 from typing import Any
 
-from llm.bedrock import BedrockClient
 from llm.openai_compatible import OpenAICompatibleClient
 
 
@@ -18,7 +17,7 @@ class AcmeLoanAgentFramework(ABC):
     VERSION = "1.0.0"
     MODEL_NAME = ""
     BEDROCK_MODEL_ID = ""
-    BEDROCK_FALLBACK_MODEL_ID = "amazon.nova-micro-v1:0"
+    BEDROCK_FALLBACK_MODEL_ID = ""
     DESCRIPTION = ""
     MCP_SERVERS: list[str] = []
     GUARDRAILS: dict[str, Any] = {}
@@ -26,9 +25,15 @@ class AcmeLoanAgentFramework(ABC):
     IS_ROUTABLE = True
     IS_SCAN_ONLY = False
 
+    OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+
     def __init__(self):
-        self.bedrock_client = BedrockClient()
-        self.model_client = OpenAICompatibleClient()
+        # Runtime LLM calls use OpenRouter credentials from .env:
+        # OPENROUTER_API_KEY and OPENROUTER_MODEL.
+        self.model_client = OpenAICompatibleClient(
+            base_url=self.OPENROUTER_BASE_URL,
+            api_key=os.getenv("OPENROUTER_API_KEY"),
+        )
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -37,6 +42,8 @@ class AcmeLoanAgentFramework(ABC):
             "version": self.VERSION,
             "framework": self.FRAMEWORK_NAME,
             "model": self.MODEL_NAME,
+            "provider": "OpenRouter",
+            "openrouter_model": os.getenv("OPENROUTER_MODEL"),
             "bedrock_model_id": self.BEDROCK_MODEL_ID,
             "bedrock_fallback_model_id": self.BEDROCK_FALLBACK_MODEL_ID,
             "description": self.DESCRIPTION,
@@ -53,35 +60,23 @@ class AcmeLoanAgentFramework(ABC):
         temperature: float = 0.2,
         max_tokens: int = 350,
     ) -> str:
-        deployment_override_model = os.getenv("BEDROCK_MODEL_ID")
-        active_model = self.BEDROCK_MODEL_ID
+        """Call OpenRouter using OPENROUTER_API_KEY + OPENROUTER_MODEL.
 
-        # Deployment override: force all routable runtime agents onto the same
-        # Bedrock model while leaving scan-only agents unchanged for scanners.
-        if deployment_override_model and self.IS_ROUTABLE and not self.IS_SCAN_ONLY:
-            active_model = deployment_override_model
+        Method name is kept for compatibility with existing agents.
+        """
+        api_key = (os.getenv("OPENROUTER_API_KEY") or "").strip()
+        model = (os.getenv("OPENROUTER_MODEL") or "").strip()
+        if not api_key:
+            return "LLM service not configured. Please set OPENROUTER_API_KEY."
+        if not model:
+            return "LLM service not configured. Please set OPENROUTER_MODEL."
 
-        primary_response = await self.bedrock_client.chat(
+        return await self.model_client.chat(
+            model=model,
             messages=messages,
-            model=active_model,
             temperature=temperature,
             max_tokens=max_tokens,
         )
-        if (
-            (
-                "Error communicating with LLM:" in primary_response
-                or primary_response.startswith("LLM service not configured")
-                or primary_response.startswith("Error:")
-            )
-            and self.BEDROCK_FALLBACK_MODEL_ID
-        ):
-            return await self.bedrock_client.chat(
-                messages=messages,
-                model=self.BEDROCK_FALLBACK_MODEL_ID,
-                temperature=temperature,
-                max_tokens=max_tokens,
-            )
-        return primary_response
 
     @abstractmethod
     async def handle(self, context: dict[str, Any]) -> dict[str, Any]:

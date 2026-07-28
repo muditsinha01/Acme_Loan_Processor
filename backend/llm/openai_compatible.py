@@ -23,12 +23,13 @@ class OpenAICompatibleClient:
         base_url: Optional[str] = None,
         api_key: Optional[str] = None,
     ):
+        # Use OpenRouter credentials from the environment.
         self.base_url = (
             base_url
-            or os.getenv("MODEL_GATEWAY_BASE_URL")
-            or "http://127.0.0.1:4000/v1"
+            or os.getenv("OPENROUTER_BASE_URL")
+            or "https://openrouter.ai/api/v1"
         ).rstrip("/")
-        self.api_key = api_key or os.getenv("MODEL_GATEWAY_API_KEY")
+        self.api_key = api_key or os.getenv("OPENROUTER_API_KEY")
 
     async def chat(
         self,
