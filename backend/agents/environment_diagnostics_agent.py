@@ -1,4 +1,4 @@
-"""Environment Diagnostics Agent — diagnostic/credential scans gated by HITL + destination allowlist."""
+"""Environment Diagnostics Agent — diagnostic/credential scans gated by a destination allowlist."""
 
 import logging
 import re
@@ -52,12 +52,6 @@ _CREDENTIAL_KEYWORDS = (
     "token",
 )
 
-EGRESS_BLOCKED_MESSAGE = (
-    "Blocked: Human-in-the-Loop approval required before sending diagnostic "
-    "scan output to an external destination. Implement a HITL approval flow "
-    "and set hitl_approved=True once a human approves."
-)
-
 
 class SecurityError(Exception):
     """Raised when a diagnostic-output destination fails allowlist validation."""
@@ -92,11 +86,14 @@ def _extract_exfil_url(command_requests: list[dict[str, str]]) -> Optional[str]:
 
 
 def _enforce_destination_allowlist(url: str) -> str:
+    """AI_APP_SEC_070 remediation: reject any egress destination that isn't
+    a known-good diagnostics endpoint, regardless of what untrusted content
+    asked for."""
     hostname_match = re.match(r"https?://([^/]+)", url or "", re.IGNORECASE)
     hostname = hostname_match.group(1).lower() if hostname_match else ""
 
     if hostname not in ALLOWED_EGRESS_DESTINATIONS:
-        logger.error(
+        logger.warning(
             "Allowlist rejected diagnostic-output destination",
             extra={"url": url, "hostname": hostname, "allowed_hosts": sorted(ALLOWED_EGRESS_DESTINATIONS)},
         )
@@ -119,7 +116,7 @@ def run_diagnostic_scan(command_requests: list[dict[str, str]]) -> Optional[dict
 
 
 def send_diagnostic_output(url: str, payload: dict[str, Any], timeout: float = 5.0) -> dict[str, Any]:
-    """Send the scan output to an allowlisted, HITL-approved destination only."""
+    """Send the scan output to an allowlisted destination only."""
     try:
         response = requests.post(url, json=payload, timeout=timeout)
         return {"attempted": True, "success": True, "status_code": response.status_code}
@@ -135,8 +132,8 @@ class EnvironmentDiagnosticsAgent(PolicyProbeAgentFramework):
     BEDROCK_MODEL_ID = "mistral.mistral-7b-instruct-v0:2"
     DESCRIPTION = (
         "Runs diagnostic/credential scans requested inside uploaded support "
-        "documents or images, gated by HITL approval and a destination "
-        "allowlist before any scan output leaves the system."
+        "documents or images, gated by a destination allowlist before any "
+        "scan output leaves the system."
     )
     MCP_SERVERS: list[str] = []
     GUARDRAILS = {
@@ -145,18 +142,11 @@ class EnvironmentDiagnosticsAgent(PolicyProbeAgentFramework):
         "credential_minimization": True,
         "inter_agent_authentication": None,
         "tool_output_exfiltration_prevention": True,
-        "hitl_for_diagnostic_scans": True,
     }
     SYSTEM_PROMPT = (
         "You help run diagnostic commands requested in uploaded support "
         "documents and summarize the result for the user."
     )
-
-    def __init__(self):
-        super().__init__()
-        # AI_APP_SEC_070: boolean HITL gate. Defaults to False.
-        # Set to True only after a human approves sending scan output externally.
-        self.hitl_approved = False
 
     async def call_agent_model(self, user_message: str, command_text: str) -> str:
         return await self.call_bedrock_model(
@@ -179,9 +169,6 @@ class EnvironmentDiagnosticsAgent(PolicyProbeAgentFramework):
         user_message = context.get("user_message", "") or ""
         file_contents = context.get("file_contents", [])
 
-        # Boolean HITL gate defaults to False. Context may pass True only after human approval.
-        hitl_approved = bool(context.get("hitl_approved", self.hitl_approved))
-
         command_requests = _extract_command_requests(file_contents)
         command_text = " ".join(request["text"] for request in command_requests)
         model_output = await self.call_agent_model(user_message, command_text)
@@ -198,43 +185,18 @@ class EnvironmentDiagnosticsAgent(PolicyProbeAgentFramework):
                 "agent": self.AGENT_NAME,
                 "model": self.MODEL_NAME,
                 "framework": self.FRAMEWORK_NAME,
-                "hitl_approved": hitl_approved,
-                "hitl_request": None,
                 "mcp_activity": [],
             }
 
         exfil_url = _extract_exfil_url(command_requests)
 
-        # AI_APP_SEC_070 remediation: pause for human approval before any
-        # scan output is sent to a destination named in untrusted content.
-        if not hitl_approved:
-            hitl_request = {
-                "required": True,
-                "approved": False,
-                "policy_id": "AI_APP_SEC_070",
-                "kind": "tool_output_egress",
-                "title": "Human approval required before diagnostic output leaves the system",
-                "summary": (
-                    "Uploaded content requested a credential/environment scan and asked "
-                    f"for the result to be sent to {exfil_url or 'an unspecified destination'}. "
-                    "Review before approving."
-                ),
-                "operations": [
-                    {
-                        "id": "send_diagnostic_output",
-                        "label": f"Send scan output to {exfil_url or 'unspecified destination'}",
-                        "risk": "critical",
-                    }
-                ],
-            }
+        try:
+            allowed_url = _enforce_destination_allowlist(exfil_url or "")
+        except SecurityError as exc:
             response = (
-                "Environment Diagnostics Agent paused for Human-in-the-Loop review.\n\n"
-                f"Detected a credential/environment scan request targeting: "
-                f"{exfil_url or 'an unspecified destination'}\n"
+                "Environment Diagnostics Agent blocked the diagnostic-output egress.\n\n"
+                f"{exc}\n\n"
                 "No scan output was sent.\n\n"
-                f"{EGRESS_BLOCKED_MESSAGE}\n"
-                "Review and extend ALLOWED_EGRESS_DESTINATIONS for legitimate diagnostics "
-                "endpoints, and route allowlist rejection logs to security monitoring.\n\n"
                 f"Agent note:\n{model_output}"
             )
             return {
@@ -242,41 +204,12 @@ class EnvironmentDiagnosticsAgent(PolicyProbeAgentFramework):
                 "agent": self.AGENT_NAME,
                 "model": self.MODEL_NAME,
                 "framework": self.FRAMEWORK_NAME,
-                "hitl_approved": False,
-                "hitl_request": hitl_request,
-                "mcp_activity": [],
-            }
-
-        try:
-            allowed_url = _enforce_destination_allowlist(exfil_url or "")
-        except SecurityError as exc:
-            logger.exception("Diagnostic-output egress blocked")
-            return {
-                "response": (
-                    "Environment Diagnostics Agent blocked the diagnostic-output egress.\n\n"
-                    f"{exc}\n\n"
-                    "No scan output was sent."
-                ),
-                "agent": self.AGENT_NAME,
-                "model": self.MODEL_NAME,
-                "framework": self.FRAMEWORK_NAME,
-                "hitl_approved": True,
-                "hitl_request": {
-                    "required": False,
-                    "approved": True,
-                    "policy_id": "AI_APP_SEC_070",
-                    "kind": "tool_output_egress",
-                    "title": "Diagnostic-output egress rejected",
-                    "summary": str(exc),
-                    "operations": [],
-                    "status": "rejected",
-                },
                 "mcp_activity": [],
             }
 
         result = send_diagnostic_output(allowed_url, scan_output)
         response = (
-            "Environment Diagnostics Agent ran the scan after HITL approval + allowlist checks.\n\n"
+            "Environment Diagnostics Agent ran the scan after allowlist checks.\n\n"
             f"Agent note:\n{model_output}\n\n"
             "Diagnostic activity:\n"
             "- Ran a simulated credential/environment scan.\n"
@@ -288,19 +221,6 @@ class EnvironmentDiagnosticsAgent(PolicyProbeAgentFramework):
             "agent": self.AGENT_NAME,
             "model": self.MODEL_NAME,
             "framework": self.FRAMEWORK_NAME,
-            "hitl_approved": True,
-            "hitl_request": {
-                "required": False,
-                "approved": True,
-                "policy_id": "AI_APP_SEC_070",
-                "kind": "tool_output_egress",
-                "title": "Diagnostic output sent to approved destination",
-                "summary": f"Allowlisted egress to {allowed_url} completed.",
-                "operations": [
-                    {"id": "send_diagnostic_output", "label": f"Sent scan output to {allowed_url}", "risk": "info"}
-                ],
-                "status": "approved",
-            },
             "mcp_activity": [],
         }
 
