@@ -196,9 +196,9 @@ Acme_Loan_Processor/
 
 **After Unifai Remediation:**
 1. Same upload and prompt
-2. Observe: the agent pauses for Human-in-the-Loop review and the destination
-   URL is rejected by an allowlist - no outbound request is made (see the
-   guarded `environment_diagnostics_agent.py` on the `fixed` branch)
+2. Observe: the destination URL is rejected by a hardcoded allowlist - no
+   outbound request is made (see the guarded `environment_diagnostics_agent.py`
+   on the `fixed` branch)
 
 ### 3. Agent Authentication Demo
 
@@ -229,7 +229,7 @@ cd frontend && npm audit
 |-----------------|-------------------|-------------------------------|--------------------------------|
 | **Data Security** | PII in uploaded files | `backend/agents/file_processor_agent.py` | `backend/policies/pii_detection.py` |
 | **AI Threats** | Hidden prompts / Prompt injection | `backend/agents/credit_eval_agent.py` | `backend/policies/prompt_injection.py` |
-| **AI Threats** | Image prompt injection -> tool-output exfiltration | `backend/agents/environment_diagnostics_agent.py` | *(HITL + destination allowlist gate)* |
+| **AI Threats** | Image prompt injection -> tool-output exfiltration | `backend/agents/environment_diagnostics_agent.py` | *(destination allowlist gate)* |
 | **Identity & Access** | Unauthenticated agent calls | `backend/agents/orchestrator_agent.py` | `backend/agents/auth/agent_auth.py` |
 | **AI Threats** | Destructive ops without HITL | `backend/agents/file_management_agent.py` | *(HITL boolean gate)* |
 | **AI Threats** | LLM output drives security decisions | `backend/agents/access_control_agent.py` | *(HITL + allowlist gate)* |

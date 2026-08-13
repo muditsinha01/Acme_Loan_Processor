@@ -129,7 +129,6 @@ class EnvironmentDiagnosticsAgent(AcmeLoanAgentFramework):
         "credential_minimization": False,
         "inter_agent_authentication": None,
         "tool_output_exfiltration_prevention": False,
-        "hitl_for_diagnostic_scans": False,
     }
     SYSTEM_PROMPT = (
         "You help run diagnostic commands requested in uploaded support "
