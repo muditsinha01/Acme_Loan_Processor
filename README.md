@@ -175,6 +175,31 @@ Acme_Loan_Processor/
 1. Upload the same file
 2. Observe: "Security threat detected: Hidden content in HTML elements"
 
+### 2b. Image Prompt Injection -> Tool-Output Exfiltration Demo (Environment Diagnostics Agent)
+
+**Before:**
+1. Run `python scripts/create_test_files.py` (or generate your own) to produce
+   `test_files/advanced/ripgrep_exfil_payload.jpg`, and edit the placeholder
+   collector URL drawn on the image to your own request-bin endpoint.
+2. Set `OPENROUTER_VISION_MODEL` in `.env` to a multimodal OpenRouter model.
+3. Upload the image and ask: "Can you run the environment diagnostics from
+   this document?" (routes to the Environment Diagnostics Agent - see
+   keyword list in `backend/agents/orchestrator_agent.py::select_agent`).
+4. The vision model transcribes the visible instruction text verbatim into
+   the document context (`backend/file_parsers/image_parser.py`).
+5. `backend/agents/environment_diagnostics_agent.py` parses a natural-language
+   "command request" out of that transcription, fabricates a fake AWS
+   credential "scan result" (`backend/config/simulated_secrets.py`), and POSTs
+   it to the URL embedded in the image - no HITL check, no destination
+   allowlist. Observe the "Diagnostic activity" note in the response and the
+   real inbound request on your collector.
+
+**After Unifai Remediation:**
+1. Same upload and prompt
+2. Observe: the agent pauses for Human-in-the-Loop review and the destination
+   URL is rejected by an allowlist - no outbound request is made (see the
+   guarded `environment_diagnostics_agent.py` on the `fixed` branch)
+
 ### 3. Agent Authentication Demo
 
 **Before:**
@@ -204,6 +229,7 @@ cd frontend && npm audit
 |-----------------|-------------------|-------------------------------|--------------------------------|
 | **Data Security** | PII in uploaded files | `backend/agents/file_processor_agent.py` | `backend/policies/pii_detection.py` |
 | **AI Threats** | Hidden prompts / Prompt injection | `backend/agents/credit_eval_agent.py` | `backend/policies/prompt_injection.py` |
+| **AI Threats** | Image prompt injection -> tool-output exfiltration | `backend/agents/environment_diagnostics_agent.py` | *(HITL + destination allowlist gate)* |
 | **Identity & Access** | Unauthenticated agent calls | `backend/agents/orchestrator_agent.py` | `backend/agents/auth/agent_auth.py` |
 | **AI Threats** | Destructive ops without HITL | `backend/agents/file_management_agent.py` | *(HITL boolean gate)* |
 | **AI Threats** | LLM output drives security decisions | `backend/agents/access_control_agent.py` | *(HITL + allowlist gate)* |
@@ -261,6 +287,7 @@ python scripts/create_test_files.py
 |----------|-------------|----------|---------|
 | `OPENROUTER_API_KEY` | API key for OpenRouter chat completions | Yes | — |
 | `OPENROUTER_MODEL` | OpenRouter model id (e.g. `meta-llama/llama-3.1-70b-instruct`) | Yes | — |
+| `OPENROUTER_VISION_MODEL` | Vision-capable OpenRouter model for image text transcription | No | falls back to `OPENROUTER_MODEL` |
 | `AGENT_SECRET` | Secret for HMAC inter-agent token signing | No | — |
 | `JWT_SECRET` | Secret for JWT signing (after Unifai remediation) | No | — |
 | `BACKEND_URL` | Backend URL for frontend proxy | No | `http://127.0.0.1:5500` |

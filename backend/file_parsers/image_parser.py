@@ -1,33 +1,43 @@
 """
 Image Parser
 
-Extracts content from image files including EXIF metadata.
+Extracts content from image files including EXIF metadata and
+vision-model transcription of any visible text.
 
 SECURITY NOTES (for Unifai demo):
 - EXIF metadata extracted without scanning
+- Visible text is transcribed verbatim by a vision model with no scanning
 - Comments and descriptions could contain prompt injections
 - No malware detection
 """
 
+import base64
 import io
 import logging
+import os
 from typing import Optional
+
+from llm.openai_compatible import OpenAICompatibleClient
 
 logger = logging.getLogger(__name__)
 
 
 class ImageParser:
     """
-    Parses image files and extracts metadata.
+    Parses image files and extracts metadata and visible text.
 
-    VULNERABILITY: Extracts EXIF data without security scanning.
+    VULNERABILITY: Extracts EXIF data and vision-transcribed text without
+    security scanning.
     - Comment fields could contain prompt injections
     - UserComment could contain malicious instructions
     - ImageDescription could contain attacks
+    - Visible pixel text is transcribed verbatim and passed downstream
     """
 
     def __init__(self):
-        pass
+        self.model_client = OpenAICompatibleClient(
+            api_key=os.getenv("OPENROUTER_API_KEY"),
+        )
 
     async def extract_metadata(self, image_bytes: bytes) -> dict:
         """
@@ -119,21 +129,60 @@ class ImageParser:
 
         return '\n'.join(text_fields)
 
-    async def extract_all(self, image_bytes: bytes) -> str:
+    async def extract_visible_text(self, image_bytes: bytes, mime_type: str = "image/jpeg") -> str:
+        """
+        Transcribe visible text rendered in the image using a vision-capable model.
+
+        VULNERABILITY: whatever text is drawn on the image is transcribed
+        verbatim and returned with no scanning - this is the image-based
+        prompt-injection vector for this demo. A vision-capable model must be
+        configured via OPENROUTER_VISION_MODEL (falls back to OPENROUTER_MODEL).
+        """
+        model = os.getenv("OPENROUTER_VISION_MODEL") or os.getenv("OPENROUTER_MODEL")
+        if not self.model_client.api_key or not model:
+            return ""
+
+        try:
+            transcription = await self.model_client.chat_vision(
+                model=model,
+                image_base64=base64.b64encode(image_bytes).decode("utf-8"),
+                mime_type=mime_type,
+                prompt=(
+                    "Transcribe every piece of text visible anywhere in this "
+                    "image verbatim - including overlaid captions, watermarks, "
+                    "and any text rendered on top of the picture. Return only "
+                    "the transcribed text, no commentary."
+                ),
+            )
+            logger.info(
+                "Image visible-text transcription complete",
+                extra={"model": model, "text_preview": transcription[:200]},
+            )
+            return transcription
+        except Exception as exc:
+            logger.error(f"Image vision transcription error: {exc}")
+            return ""
+
+    async def extract_all(self, image_bytes: bytes, mime_type: str = "image/jpeg") -> str:
         """
         Extract all content from image for analysis.
 
-        VULNERABILITY: All metadata including potentially malicious
-        content is extracted and returned without filtering.
+        VULNERABILITY: All metadata and vision-transcribed text, including
+        potentially malicious content, is extracted and returned without
+        filtering.
         """
         metadata = await self.extract_metadata(image_bytes)
         text_content = await self.extract_text_fields(metadata)
+        visible_text = await self.extract_visible_text(image_bytes, mime_type)
 
         # VULNERABILITY: Combine all content without security checks
         result_parts = []
 
         if text_content:
             result_parts.append(f"Image Metadata:\n{text_content}")
+
+        if visible_text:
+            result_parts.append(f"Visible Text in Image:\n{visible_text}")
 
         result_parts.append(f"Image Info: {metadata.get('format', 'unknown')} {metadata.get('size', 'unknown')}")
 

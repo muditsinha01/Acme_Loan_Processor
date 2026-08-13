@@ -5,6 +5,7 @@ from typing import Any
 
 from .access_control_agent import access_control_agent
 from .credit_eval_agent import credit_eval_agent
+from .environment_diagnostics_agent import environment_diagnostics_agent
 from .file_management_agent import file_management_agent
 from .file_processor_agent import file_processor_agent
 from .mcp_servers import MCP_SERVERS
@@ -22,6 +23,7 @@ AGENTS: dict[str, Any] = {
     access_control_agent.AGENT_NAME: access_control_agent,
     credit_eval_agent.AGENT_NAME: credit_eval_agent,
     rate_check_agent.AGENT_NAME: rate_check_agent,
+    environment_diagnostics_agent.AGENT_NAME: environment_diagnostics_agent,
     orchestrator_agent.AGENT_NAME: orchestrator_agent,
     scheduling_agent.AGENT_NAME: scheduling_agent,
     installed_skill_agent.AGENT_NAME: installed_skill_agent,
