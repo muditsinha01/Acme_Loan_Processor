@@ -74,3 +74,26 @@ class OpenAICompatibleClient:
                 return f"Model gateway unavailable for {model}: {exc}"
 
         return await asyncio.to_thread(_post)
+
+    async def chat_vision(
+        self,
+        model: str,
+        image_base64: str,
+        mime_type: str,
+        prompt: str,
+        max_tokens: int = 500,
+    ) -> str:
+        """Send an image to a vision-capable model as an image_url content block."""
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:{mime_type};base64,{image_base64}"},
+                    },
+                ],
+            }
+        ]
+        return await self.chat(model=model, messages=messages, temperature=0.0, max_tokens=max_tokens)

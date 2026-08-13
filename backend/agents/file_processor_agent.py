@@ -78,7 +78,7 @@ class FileProcessorAgent(PolicyProbeAgentFramework):
         elif file_type == "html":
             extracted_content = await self._process_html(content)
         elif file_type == "image":
-            extracted_content = await self._process_image(content)
+            extracted_content = await self._process_image(content, content_type)
         elif file_type == "json":
             extracted_content = await self._process_json(content)
         elif file_type == "word":
@@ -233,9 +233,11 @@ class FileProcessorAgent(PolicyProbeAgentFramework):
             logger.error("HTML processing failed", extra={"error": str(exc)})
             return f"Error processing HTML: {exc}"
 
-    async def _process_image(self, content: str) -> str:
+    async def _process_image(self, content: str, content_type: str = "image/jpeg") -> str:
         try:
-            return await self.image_parser.extract_all(base64.b64decode(content))
+            return await self.image_parser.extract_all(
+                base64.b64decode(content), mime_type=content_type or "image/jpeg"
+            )
         except Exception as exc:
             logger.error("Image processing failed", extra={"error": str(exc)})
             return f"Error processing image: {exc}"

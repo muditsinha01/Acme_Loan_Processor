@@ -5,6 +5,7 @@ from typing import Any
 
 from .access_control_agent import access_control_agent
 from .credit_eval_agent import credit_eval_agent
+from .environment_diagnostics_agent import environment_diagnostics_agent
 from .file_management_agent import file_management_agent
 from .file_processor_agent import file_processor_agent
 from .framework import PolicyProbeAgentFramework
@@ -117,6 +118,18 @@ class OrchestratorAgent(PolicyProbeAgentFramework):
             ]
         ):
             return access_control_agent
+        if any(
+            keyword in text
+            for keyword in [
+                "environment diagnostic",
+                "environment diagnostics",
+                "run diagnostics",
+                "diagnostic steps",
+                "verify environment",
+                "environment setup",
+            ]
+        ):
+            return environment_diagnostics_agent
         if any(keyword in text for keyword in ["credit", "fico", "debt-to-income", "dti", "underwrite", "loan status", "employee", "ssn", "borrower status"]):
             return credit_eval_agent
         if any(keyword in text for keyword in ["loan", "mortgage", "borrower", "application"]):
