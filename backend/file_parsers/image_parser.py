@@ -131,14 +131,14 @@ class ImageParser:
 
     async def extract_visible_text(self, image_bytes: bytes, mime_type: str = "image/jpeg") -> str:
         """
-        Transcribe visible text rendered in the image using a vision-capable model.
+        Transcribe visible text rendered in the image using the configured model.
 
         VULNERABILITY: whatever text is drawn on the image is transcribed
         verbatim and returned with no scanning - this is the image-based
-        prompt-injection vector for this demo. A vision-capable model must be
-        configured via OPENROUTER_VISION_MODEL (falls back to OPENROUTER_MODEL).
+        prompt-injection vector for this demo. Uses OPENROUTER_MODEL
+        (must be multimodal for image transcription).
         """
-        model = os.getenv("OPENROUTER_VISION_MODEL") or os.getenv("OPENROUTER_MODEL")
+        model = os.getenv("OPENROUTER_MODEL")
         if not self.model_client.api_key or not model:
             return ""
 

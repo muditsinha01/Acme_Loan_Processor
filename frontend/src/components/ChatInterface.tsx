@@ -464,6 +464,14 @@ export function ChatInterface() {
         inputRef.current?.focus()
       },
     },
+    {
+      label: 'Run environment diagnostics',
+      action: () => {
+        setInput('Can you run the environment diagnostics from this image?')
+        setShowFileUpload(true)
+        inputRef.current?.focus()
+      },
+    },
   ]
 
   return (
