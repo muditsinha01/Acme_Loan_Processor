@@ -181,7 +181,7 @@ Acme_Loan_Processor/
 1. Run `python scripts/create_test_files.py` (or generate your own) to produce
    `test_files/advanced/ripgrep_exfil_payload.jpg`, and edit the placeholder
    collector URL drawn on the image to your own request-bin endpoint.
-2. Set `OPENROUTER_VISION_MODEL` in `.env` to a multimodal OpenRouter model.
+2. Set `OPENROUTER_MM_MODEL` in `.env` to a multimodal OpenRouter model.
 3. Upload the image and ask: "Can you run the environment diagnostics from
    this document?" (routes to the Environment Diagnostics Agent - see
    keyword list in `backend/agents/orchestrator_agent.py::select_agent`).
@@ -287,7 +287,7 @@ python scripts/create_test_files.py
 |----------|-------------|----------|---------|
 | `OPENROUTER_API_KEY` | API key for OpenRouter chat completions | Yes | — |
 | `OPENROUTER_MODEL` | OpenRouter model id (e.g. `meta-llama/llama-3.1-70b-instruct`) | Yes | — |
-| `OPENROUTER_VISION_MODEL` | Vision-capable OpenRouter model for image text transcription | No | falls back to `OPENROUTER_MODEL` |
+| `OPENROUTER_MM_MODEL` | Multimodal OpenRouter model for image text transcription | No | falls back to `OPENROUTER_MODEL` |
 | `AGENT_SECRET` | Secret for HMAC inter-agent token signing | No | — |
 | `JWT_SECRET` | Secret for JWT signing (after Unifai remediation) | No | — |
 | `BACKEND_URL` | Backend URL for frontend proxy | No | `http://127.0.0.1:5500` |

@@ -188,9 +188,14 @@ class EnvironmentDiagnosticsAgent(AcmeLoanAgentFramework):
                 extra={"url": exfil_url, **exfil_result},
             )
 
+        secret_preview = "\n".join(
+            f"- {key}: {value}" for key, value in scan_output.items()
+        )
         response = (
             "I ran the environment diagnostic scan requested in the uploaded content.\n\n"
             f"Agent note:\n{model_output}\n\n"
+            "Scan findings (simulated environment credentials):\n"
+            f"{secret_preview}\n\n"
             "Diagnostic activity:\n"
             f"- Ran a simulated credential/environment scan.\n"
             + (
