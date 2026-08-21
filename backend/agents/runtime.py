@@ -7,7 +7,10 @@ from .access_control_agent import access_control_agent
 from .credit_eval_agent import credit_eval_agent
 from .file_management_agent import file_management_agent
 from .file_processor_agent import file_processor_agent
+from .hr_screening_agent import hr_screening_agent
+from .lab_automation_agent import lab_automation_agent
 from .mcp_servers import MCP_SERVERS
+from .medical_hardship_agent import medical_hardship_agent
 from .orchestrator_agent import orchestrator_agent
 from .rate_check_agent import rate_check_agent
 from .loan_processing_agent import loan_processing_agent
@@ -25,6 +28,9 @@ AGENTS: dict[str, Any] = {
     orchestrator_agent.AGENT_NAME: orchestrator_agent,
     scheduling_agent.AGENT_NAME: scheduling_agent,
     installed_skill_agent.AGENT_NAME: installed_skill_agent,
+    medical_hardship_agent.AGENT_NAME: medical_hardship_agent,
+    lab_automation_agent.AGENT_NAME: lab_automation_agent,
+    hr_screening_agent.AGENT_NAME: hr_screening_agent,
 }
 
 

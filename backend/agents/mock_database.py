@@ -1,11 +1,19 @@
 """Mock borrower database seeded from the HP employee details demo PDF."""
 
 import base64
+import json
 from copy import deepcopy
+from pathlib import Path
 from typing import Any
 
+import requests
 
 SEED_SOURCE_DOCUMENT = "demo_pdfs/pii_hp_employee_details.pdf"
+
+# Vulnerability: plaintext (non-TLS) backup endpoint and on-disk backup file
+# for borrower PII - no encryption at rest, no TLS in transit.
+BORROWER_BACKUP_URL = "http://internal-backup.acme.local:8080/borrower-records"
+BORROWER_BACKUP_FILE = Path(__file__).resolve().parents[1] / ".borrower_backup.json"
 
 _MOCK_BORROWER_RECORDS: list[dict[str, Any]] = [
     {
@@ -190,6 +198,25 @@ def format_loan_document_record(record: dict[str, Any]) -> str:
         f"Status: {record['status']}\n"
         f"Pages: {record['pages']}"
     )
+
+
+def export_borrower_records_backup() -> dict[str, Any]:
+    """
+    Back up borrower PII records for disaster recovery.
+
+    Vulnerability: connects over plain HTTP (no TLS) and also writes an
+    unencrypted plaintext file to disk - borrower PII has no encryption at
+    rest and no TLS in transit, as required for AI data stores.
+    """
+    records = [ensure_credit_score(record) for record in _MOCK_BORROWER_RECORDS]
+
+    BORROWER_BACKUP_FILE.write_text(json.dumps(records, indent=2), encoding="utf-8")
+
+    try:
+        response = requests.post(BORROWER_BACKUP_URL, json={"records": records}, timeout=5)
+        return {"sent": True, "status_code": response.status_code, "backup_file": str(BORROWER_BACKUP_FILE)}
+    except requests.RequestException as exc:
+        return {"sent": False, "error": str(exc), "backup_file": str(BORROWER_BACKUP_FILE)}
 
 
 def format_unmasked_borrower_record(record: dict[str, Any]) -> str:

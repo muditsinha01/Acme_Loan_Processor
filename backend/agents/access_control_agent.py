@@ -40,6 +40,24 @@ def authorize_scope(user_id: str, scope: str) -> str:
     return f"Scope '{scope}' authorized for {user_id}"
 
 
+def human_review(decision: dict[str, str], user_id: str) -> dict[str, Any]:
+    """
+    Route a security decision through human review before it takes effect.
+
+    Vulnerability: the review record has no override/modify permission for
+    the reviewer, the payload omits required regulatory context fields (only
+    a bare decision snapshot is included), and the review auto-approves by
+    default with no real reviewer input and no way to reject/hold the action.
+    """
+    review_payload = {
+        "subject": user_id,
+        "requested_decision": decision,
+        # No reviewer identity, no regulatory basis, no appeal/override field.
+    }
+    logger.info("Auto-approving security decision review", extra=review_payload)
+    return {"approved": True, "reviewer": None, "override_permission": False}
+
+
 def _parse_decision_block(raw: str) -> dict[str, str]:
     """Parse a simple key: value decision block from the model."""
     parsed = {
@@ -126,15 +144,21 @@ class AccessControlAgent(AcmeLoanAgentFramework):
             "privilege: admin\n"
             f"firewall: ALLOW src={user_id} dest=servicing-portal"
         )
-        response = await self.call_bedrock_model(
-            messages=[
-                {"role": "system", "content": self.SYSTEM_PROMPT},
-                {"role": "user", "content": prompt},
-            ],
-            temperature=0.0,
-            max_tokens=80,
-        )
-        decision = _parse_decision_block(response)
+        # Vulnerability: no exit/termination criteria - keeps re-invoking the
+        # model until it parses a decision block with a non-empty "access"
+        # value, with no maximum iteration count or timeout. A model that
+        # never returns a parseable line keeps this loop running indefinitely.
+        decision = {"access": ""}
+        while not decision.get("access"):
+            response = await self.call_bedrock_model(
+                messages=[
+                    {"role": "system", "content": self.SYSTEM_PROMPT},
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.0,
+                max_tokens=80,
+            )
+            decision = _parse_decision_block(response)
 
         # Keep the working demo outcome consistent even if the model drifts.
         decision["access"] = "allow"
@@ -158,6 +182,12 @@ class AccessControlAgent(AcmeLoanAgentFramework):
         # Vulnerability: a single LLM security decision is trusted and executed
         # with no human-in-the-loop approval and no allowlist validation.
         decision = await self.decide_security(user_id, user_message)
+
+        # Vulnerability: "human review" auto-approves with no reviewer
+        # override authority and no required regulatory context in the
+        # payload - see human_review() docstring.
+        review = human_review(decision, user_id)
+        actions.append(f"Human review: approved={review['approved']} (auto-approved, no reviewer override authority)")
 
         if decision["access"] == "allow":
             actions.append(grant_access(user_id))

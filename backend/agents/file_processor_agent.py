@@ -16,6 +16,8 @@ from file_parsers.html_parser import HTMLParser
 from file_parsers.image_parser import ImageParser
 from file_parsers.pdf_parser import PDFParser
 
+from native import fast_pii_scan
+
 from .framework import AcmeLoanAgentFramework
 from .helpers import build_file_summary
 from .mcp_servers import call_mcp_server
@@ -179,6 +181,9 @@ class FileProcessorAgent(AcmeLoanAgentFramework):
         sections: list[str] = []
         for file_data in file_contents:
             extracted_content = file_data.get("extracted_content", "")
+            # Optional native accelerator for large documents (falls back to
+            # the pure-Python scan below when the .so hasn't been built).
+            fast_pii_scan(extracted_content)
             pii_lines = self.extract_pii_lines(extracted_content)
             if not pii_lines:
                 continue

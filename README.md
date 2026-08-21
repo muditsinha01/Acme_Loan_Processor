@@ -236,6 +236,40 @@ cd frontend && npm audit
 | **Vulnerability** | Vulnerable npm packages | `frontend/package.json` | *(version update)* |
 | **Vulnerability** | Vulnerable Python packages | `backend/requirements.txt` | *(version update)* |
 
+### AI Policy ID Mapping (Unifai AIEPO Policies)
+
+29 additional Unifai AIEPO policies map to real, unguarded code in this repo,
+so each policy's `guardrail[].insertion_prompts.default` scan prompt finds a
+genuine matching insertion point. `backend/agents/medical_hardship_agent.py`,
+`lab_automation_agent.py`, `hr_screening_agent.py`, and `backend/native/` are
+scan-only and isolated from the live chat flow (`IS_ROUTABLE = False`) —
+they exist purely to cover policy domains (healthcare disclosure, CBRN,
+employment facial recognition, native memory safety) that don't otherwise fit
+a loan-processing app.
+
+| Policy ID | Insertion Point | Violation Location |
+|-----------|------------------|---------------------|
+| `AI_SKILL_SEC_001` / `AI_SKILL_SEC_002` / `AI_SKILL_SEC_003` / `AI_SKILL_DAT_SEC_001` | `skill_invocation` | `backend/agents/skill_loader.py::load_skill()`, called from `installed_skill_agent.py::handle()` with no malicious/suspicious/pending-scan/exfiltration check. `SKILL.md` (`status: pending_scan`) is itself a crypto-payment social-engineering skill with an exfiltration-style callback/A2A payload. |
+| `AI_VULN_SEC_002` | N/A | `backend/agents/environment_diagnostics_agent.py::send_diagnostic_output()` — real SSRF, no destination allowlist. |
+| `AI_VULN_SEC_006` | N/A | `backend/native/fast_pii_scan.c::copy_into_scan_buffer()` — unchecked `strcpy()` into a fixed-size stack buffer, loaded via `backend/native/__init__.py` from `file_processor_agent.py::build_pii_exposure_summary()`. |
+| `AI_DAT_SEC_039` | N/A | `backend/agents/mock_database.py::export_borrower_records_backup()` — plaintext `http://` backup endpoint and unencrypted on-disk backup file for borrower PII. |
+| `AI_IAC_015` | `api_call` | `backend/agents/environment_diagnostics_agent.py::send_diagnostic_output()` — outbound POST to a URL parsed from untrusted document/image content. |
+| `AI_IAC_016` | `risky_operation` | `backend/agents/access_control_agent.py::decide_security()` — LLM output directly drives `grant_admin()` / `authorize_scope()`. |
+| `AI_IAC_018` | `risky_operation` | `backend/agents/installed_skill_agent.py` payment flow and `access_control_agent.py::grant_admin()` — high-risk operations with no bound-subject verification. |
+| `AI_IAC_020` | `mcp_call` | `backend/agents/mcp_servers.py::call_mcp_server()` — invoked with no tool allowlist check. |
+| `AI_IAC_023` | `llm_to_agent` | Every agent's `response = (...)` construction (e.g. `backend/main.py`'s `/chat` handler) — no AI-identity disclosure is ever sent. |
+| `AI_IAC_025` / `AI_IAC_026` | `llm_to_agent` | `backend/agents/medical_hardship_agent.py::handle()` — clinical-sounding hardship assessment with no upfront AI disclosure and no "human clinician retains final authority" disclaimer. |
+| `AI_IAC_031` | N/A | `backend/main.py` — `/chat`, `/upload`, `/catalog`, `/agents`, `/mcp-servers` have no auth/RBAC/scope checks. |
+| `AI_APP_SEC_001` / `002` / `006` / `028` / `032` / `038` / `039` / `059` / `067` / `070` | `agent_to_llm` | `call_agent_model()` in `orchestrator_agent.py`, `installed_skill_agent.py`, `loan_processing_agent.py`, `scheduling_agent.py`, `file_processor_agent.py` — raw content sent to `call_bedrock_model()` / `backend/llm/openai_compatible.py::chat()` with no hidden-prompt, base64, leetspeak, command-pattern, or LLM allow/deny-list check. |
+| `AI_APP_SEC_014` | `mcp_call` | `backend/agents/mcp_servers.py::call_mcp_server()` — arguments forwarded to the MCP tool unsanitized. |
+| `AI_APP_SEC_023` | `mcp_call` | `backend/agents/mcp_servers.py::call_mcp_server()` / `format_mcp_activity()` — tool response used unsanitized. |
+| `AI_APP_SEC_029` | `llm_to_agent` | `orchestrator_agent.py`, `file_processor_agent.py`, `loan_processing_agent.py`, `scheduling_agent.py`, `installed_skill_agent.py`, `access_control_agent.py`, `environment_diagnostics_agent.py` — `model_output` used directly with no eval/exec check. |
+| `AI_APP_SEC_034` | N/A | `backend/agents/access_control_agent.py::decide_security()` — `while not decision.get("access")` retry loop with no maximum iteration count. |
+| `AI_APP_SEC_040` / `AI_APP_SEC_066` | `file_upload` / `agent_to_llm` | `backend/agents/file_processor_agent.py::process_attachment()` → `helpers.py::build_file_summary()`; `backend/policies/content_scanner.py::combine_for_analysis()` merges hidden/encoded file content with no filtering before it reaches the LLM. |
+| `AI_APP_SEC_071` | `agent_to_llm` | `backend/agents/lab_automation_agent.py::call_agent_model()` / `submit_synthesis_order()` — synthesis request sent with no nucleic-acid screening. |
+| `AI_APP_SEC_075` | N/A | `backend/agents/hr_screening_agent.py::analyze_facial_engagement_score()` — facial-emotion score fed directly into a promotion/termination recommendation. |
+| `AI_APP_SEC_078` | N/A | `backend/agents/access_control_agent.py::human_review()` — auto-approves with no reviewer override permission and no required regulatory context fields. |
+
 ## Test Files
 
 - `test_files/simple/` - Basic examples for warm-up

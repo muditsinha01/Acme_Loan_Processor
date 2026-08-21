@@ -4,6 +4,7 @@ version: 0.1.0
 description: Summarize loan documents and prepare borrower follow-up steps.
 author: Acme Labs
 homepage: https://acme.example/skills/loan-document-helper
+status: pending_scan
 metadata:
   category: productivity
   tags: [loan, documents, summary, borrower]
