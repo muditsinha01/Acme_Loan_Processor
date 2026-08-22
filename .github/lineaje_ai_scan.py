@@ -74,7 +74,7 @@ logger = logging.getLogger("gha_repo_scan")
 # ===========================================================================
 
 MCP_SERVER_URL = "https://mcp.v2.prod.veedna.com/mcp"
-SCANNER_BUILD = "2026-08-22-response-parser-v4"
+SCANNER_BUILD = "2026-08-22-response-parser-v5-text-first"
 
 MAX_SCAN_WORKERS = 4
 REMEDIATION_BRANCH_PREFIX = "remediation/unifai-gha"
@@ -612,6 +612,43 @@ def _normalize_mcp_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         if target_key not in data and source_key in data:
             data[target_key] = data[source_key]
 
+    # Some MCP SDK/server combinations expose structuredContent as:
+    #     {"result": <actual tool payload>}
+    # The Lineaje server's text content is preferred, but keep this fallback
+    # so a structured-only response is still usable.
+    if set(data.keys()) == {"result"}:
+        nested = data["result"]
+
+        # A result may itself be a JSON-encoded string.
+        if isinstance(nested, str):
+            nested = _json_unwrap(nested)
+
+        if isinstance(nested, dict):
+            return _normalize_mcp_payload(nested)
+
+        # If the only result is an array, this server is returning the scan
+        # findings directly. Treat those entries as violations/remediation
+        # actions rather than silently reporting zero violations.
+        if isinstance(nested, list):
+            return {
+                "status": "violations_found" if nested else "compliant",
+                "remediation_actions": nested,
+                "violations": nested,
+                "aibom": [],
+                "report": "",
+            }
+
+        # Do not silently turn an unknown result envelope into compliance.
+        return {
+            "_parse_error": (
+                "MCP result envelope contained an unsupported result type: "
+                f"{type(nested).__name__}"
+            ),
+            "raw": str(nested),
+        }
+
+    # The existing scanner uses remediation_actions as its canonical violation
+    # list. Preserve explicit violations while feeding them into that path too.
     if not data.get("remediation_actions") and isinstance(data.get("violations"), list):
         data["remediation_actions"] = data["violations"]
 
@@ -629,12 +666,14 @@ def _tool_result_text(result: Any) -> str:
 
 
 def _parse_tool_result(result: Any, *, tool_name: str = "MCP tool") -> dict:
-    """Parse MCP CallToolResult safely.
+    """Parse an MCP CallToolResult, preferring Lineaje's text payload.
 
-    MCP 1.14+ supports structuredContent in addition to textual content.
-    Older/custom implementations may put JSON in one or more text blocks.
-    Unknown output is returned as a parse error so it cannot become a false
-    "0 violations => compliant" result.
+    The known-working Lineaje scanner reads ``result.content[0].text`` and
+    JSON-decodes that value. Keep that behavior as the primary path.
+
+    ``structuredContent`` is only a fallback because, for this MCP server,
+    it may contain an outer ``{"result": ...}`` envelope rather than the
+    final Lineaje scan object.
     """
     if result is None:
         return {
@@ -654,46 +693,84 @@ def _parse_tool_result(result: Any, *, tool_name: str = "MCP tool") -> dict:
             "raw": raw_text,
         }
 
-    structured = getattr(result, "structuredContent", None)
-    if structured is None:
-        structured = getattr(result, "structured_content", None)
-
-    if structured is not None:
-        decoded = _json_unwrap(structured)
-        if isinstance(decoded, dict):
-            return _normalize_mcp_payload(decoded)
-
-    parsed_dicts: List[Dict[str, Any]] = []
+    # ------------------------------------------------------------------
+    # 1. TEXT FIRST
+    #
+    # This intentionally matches the known-working implementation:
+    # json.loads(result.content[0].text)
+    #
+    # We inspect all text blocks rather than only the first one, but the
+    # first valid JSON object wins.
+    # ------------------------------------------------------------------
     for block in (getattr(result, "content", None) or []):
         block_text = getattr(block, "text", None)
         if block_text is None:
             continue
 
         decoded = _json_unwrap(str(block_text))
+
         if isinstance(decoded, dict):
-            parsed_dicts.append(_normalize_mcp_payload(decoded))
+            normalized = _normalize_mcp_payload(decoded)
 
-    if parsed_dicts:
-        merged: Dict[str, Any] = {}
+            if "_parse_error" not in normalized:
+                logger.info(
+                    "Parsed %s from MCP text content",
+                    tool_name,
+                )
+                return normalized
 
-        for item in parsed_dicts:
-            for key, value in item.items():
-                if key in {"remediation_actions", "violations", "aibom"} and isinstance(value, list):
-                    existing = merged.get(key)
-                    if isinstance(existing, list):
-                        existing.extend(value)
-                    else:
-                        merged[key] = list(value)
-                elif key == "report" and value:
-                    if merged.get("report"):
-                        merged["report"] = f"{merged['report']}\n\n{value}"
-                    else:
-                        merged["report"] = value
-                else:
-                    merged[key] = value
+        # A server may theoretically return the findings array directly.
+        if isinstance(decoded, list):
+            logger.info(
+                "Parsed %s as direct findings array from MCP text content",
+                tool_name,
+            )
+            return {
+                "status": "violations_found" if decoded else "compliant",
+                "remediation_actions": decoded,
+                "violations": decoded,
+                "aibom": [],
+                "report": "",
+            }
 
-        return _normalize_mcp_payload(merged)
+    # ------------------------------------------------------------------
+    # 2. STRUCTURED CONTENT FALLBACK
+    # ------------------------------------------------------------------
+    structured = getattr(result, "structuredContent", None)
+    if structured is None:
+        structured = getattr(result, "structured_content", None)
 
+    if structured is not None:
+        decoded = _json_unwrap(structured)
+
+        if isinstance(decoded, dict):
+            normalized = _normalize_mcp_payload(decoded)
+
+            if "_parse_error" not in normalized:
+                logger.info(
+                    "Parsed %s from MCP structured content fallback",
+                    tool_name,
+                )
+                return normalized
+
+            return normalized
+
+        if isinstance(decoded, list):
+            logger.info(
+                "Parsed %s as direct findings array from MCP structured content",
+                tool_name,
+            )
+            return {
+                "status": "violations_found" if decoded else "compliant",
+                "remediation_actions": decoded,
+                "violations": decoded,
+                "aibom": [],
+                "report": "",
+            }
+
+    # ------------------------------------------------------------------
+    # 3. PYDANTIC MODEL-DUMP FALLBACK
+    # ------------------------------------------------------------------
     if hasattr(result, "model_dump"):
         try:
             dumped = result.model_dump(by_alias=True)
@@ -701,12 +778,35 @@ def _parse_tool_result(result: Any, *, tool_name: str = "MCP tool") -> dict:
             dumped = None
 
         if isinstance(dumped, dict):
+            # Prefer the dumped text content too, for the same reason as above.
+            dumped_content = dumped.get("content")
+            if isinstance(dumped_content, list):
+                for block in dumped_content:
+                    if not isinstance(block, dict):
+                        continue
+
+                    block_text = block.get("text")
+                    if block_text is None:
+                        continue
+
+                    decoded = _json_unwrap(str(block_text))
+                    if isinstance(decoded, dict):
+                        normalized = _normalize_mcp_payload(decoded)
+                        if "_parse_error" not in normalized:
+                            logger.info(
+                                "Parsed %s from MCP model_dump text content",
+                                tool_name,
+                            )
+                            return normalized
+
             for key in ("structuredContent", "structured_content"):
                 candidate = dumped.get(key)
-                if candidate is not None:
-                    decoded = _json_unwrap(candidate)
-                    if isinstance(decoded, dict):
-                        return _normalize_mcp_payload(decoded)
+                if candidate is None:
+                    continue
+
+                decoded = _json_unwrap(candidate)
+                if isinstance(decoded, dict):
+                    return _normalize_mcp_payload(decoded)
 
     return {
         "_parse_error": f"{tool_name} response contained no recognized JSON payload",
