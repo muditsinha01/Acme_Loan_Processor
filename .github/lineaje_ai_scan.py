@@ -515,8 +515,67 @@ def _run_mcp_scan_via_client(
     archive_path: str,
     head_sha: str = "",
 ) -> Dict[str, Any]:
-    from mcp.client.streamable_http import streamablehttp_client
+    """Run the MCP upload/analyze flow with MCP Python SDK v2 or v1.
+
+    MCP SDK v2 renamed ``streamablehttp_client`` to
+    ``streamable_http_client`` and moved HTTP configuration (headers/timeouts)
+    onto a caller-owned ``httpx2.AsyncClient``.  v2 also yields two streams
+    instead of the three-value tuple returned by v1.
+
+    Keep a v1 fallback so the GitHub Action remains usable if an older runner
+    or explicitly pinned dependency is used.
+    """
+    from contextlib import asynccontextmanager
     from mcp import ClientSession
+
+    try:
+        import httpx2
+        from mcp.client.streamable_http import streamable_http_client
+
+        mcp_sdk_mode = "v2"
+
+        @asynccontextmanager
+        async def _transport(token: str, read_timeout_seconds: int):
+            headers = {"Authorization": f"Bearer {token}"}
+            if head_sha:
+                headers["X-Unifai-Commit-Sha"] = head_sha
+
+            # MCP v2 expects all HTTP-level configuration on httpx2.AsyncClient.
+            # 30s covers connect/write/pool operations; the read timeout is longer
+            # because analyze_uploaded_archive may keep the response stream open.
+            timeout = httpx2.Timeout(30.0, read=float(read_timeout_seconds))
+            async with httpx2.AsyncClient(
+                headers=headers,
+                timeout=timeout,
+                follow_redirects=True,
+            ) as http_client:
+                async with streamable_http_client(
+                    server_url,
+                    http_client=http_client,
+                ) as (read_stream, write_stream):
+                    yield read_stream, write_stream
+
+    except (ImportError, ModuleNotFoundError):
+        # MCP SDK v1 compatibility path.  Older releases expose the transport
+        # as streamablehttp_client and return (read, write, session_id_getter).
+        from datetime import timedelta
+        from mcp.client.streamable_http import streamablehttp_client
+
+        mcp_sdk_mode = "v1"
+
+        @asynccontextmanager
+        async def _transport(token: str, read_timeout_seconds: int):
+            headers = {"Authorization": f"Bearer {token}"}
+            if head_sha:
+                headers["X-Unifai-Commit-Sha"] = head_sha
+
+            async with streamablehttp_client(
+                server_url,
+                headers=headers,
+                sse_read_timeout=timedelta(seconds=read_timeout_seconds),
+            ) as streams:
+                # v1 yields three values; only the read/write streams are needed.
+                yield streams[0], streams[1]
 
     async def _scan() -> Dict[str, Any]:
         upload_args: Dict[str, Any] = {
@@ -524,14 +583,13 @@ def _run_mcp_scan_via_client(
             "branch_or_tag": branch,
             "files_to_scan": files_to_scan,
         }
-        # Only known to the SCM/CI script — a coding agent (Cursor/Claude Code) has no
-        # way to set a custom transport header, so this signal cannot leak into IDE scans.
-        scm_headers: Dict[str, str] = {"X-Unifai-Commit-Sha": head_sha} if head_sha else {}
 
+        logger.info("Using MCP Python SDK %s streamable HTTP client", mcp_sdk_mode)
+
+        # Step 1 is normally quick, but allow the historical MCP default of five
+        # minutes for a slow control plane response.
         tok1 = bearer_getter()
-        async with streamablehttp_client(
-            server_url, headers={"Authorization": f"Bearer {tok1}", **scm_headers},
-        ) as (read, write, _):
+        async with _transport(tok1, 300) as (read, write):
             async with ClientSession(read, write) as session:
                 await session.initialize()
                 logger.info("MCP step 1/3: get_upload_url")
@@ -539,27 +597,37 @@ def _run_mcp_scan_via_client(
                     await session.call_tool("get_upload_url", arguments=upload_args)
                 )
                 if not upload_result.get("success"):
-                    raise RuntimeError(f"get_upload_url failed: {upload_result.get('error', upload_result)}")
+                    raise RuntimeError(
+                        f"get_upload_url failed: {upload_result.get('error', upload_result)}"
+                    )
                 archive_id = upload_result["archive_id"]
                 presigned_url = upload_result["presigned_url"]
 
         logger.info("MCP step 2/3: upload to S3")
         _upload_to_s3(presigned_url, archive_path)
 
+        # Step 3 can legitimately take much longer while the archive is analyzed.
         tok2 = bearer_getter()
-        sse_timeout = int(os.environ.get("UNIFAI_MCP_SSE_READ_TIMEOUT", "1800"))
-        async with streamablehttp_client(
-            server_url,
-            headers={"Authorization": f"Bearer {tok2}", **scm_headers},
-            sse_read_timeout=sse_timeout,
-        ) as (read2, write2, _):
+        try:
+            sse_timeout = int(os.environ.get("UNIFAI_MCP_SSE_READ_TIMEOUT", "1800"))
+        except ValueError:
+            sse_timeout = 1800
+        sse_timeout = max(1, sse_timeout)
+
+        async with _transport(tok2, sse_timeout) as (read2, write2):
             async with ClientSession(read2, write2) as session2:
                 await session2.initialize()
-                logger.info("MCP step 3/3: analyze_uploaded_archive (timeout=%ds)", sse_timeout)
+                logger.info(
+                    "MCP step 3/3: analyze_uploaded_archive (timeout=%ds)",
+                    sse_timeout,
+                )
                 analyze_args = dict(upload_args)
                 analyze_args["archive_id"] = archive_id
                 result = _parse_tool_result(
-                    await session2.call_tool("analyze_uploaded_archive", arguments=analyze_args)
+                    await session2.call_tool(
+                        "analyze_uploaded_archive",
+                        arguments=analyze_args,
+                    )
                 )
                 return result
 
