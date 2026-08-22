@@ -130,7 +130,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install "mcp>=1.28,<2"
+          pip install "mcp==1.14.1"
           python -c "import importlib.metadata; print('MCP version:', importlib.metadata.version('mcp'))"
 
       # Report-only gate: the scanner exits 0 even when violations are found, so a
