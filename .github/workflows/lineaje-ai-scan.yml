@@ -129,7 +129,9 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install mcp
+        run: |
+          pip install "mcp>=1.28,<2"
+          python -c "import importlib.metadata; print('MCP version:', importlib.metadata.version('mcp'))"
 
       # Report-only gate: the scanner exits 0 even when violations are found, so a
       # PR is never blocked — violations are listed, not enforced. (A real scan
