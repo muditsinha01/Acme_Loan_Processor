@@ -44,21 +44,21 @@ from __future__ import annotations
 import argparse
 import asyncio
 import base64
+import io
 import fnmatch
 import json
 import logging
 import os
 import pathlib
 import re
-import subprocess
 import sys
 import tempfile
 import threading
 import time
+import tarfile
 import urllib.error
 import urllib.parse
 import urllib.request
-import zipfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -70,7 +70,7 @@ logger = logging.getLogger("gha_repo_scan")
 # ===========================================================================
 
 MCP_SERVER_URL = "https://mcp.v2.prod.veedna.com/mcp"
-SCANNER_BUILD = "2026-08-22-old-working-plus-safe-v1"
+SCANNER_BUILD = "2026-08-22-dev-scm-targz-v1"
 
 MAX_SCAN_WORKERS = 4
 REMEDIATION_BRANCH_PREFIX = "remediation/unifai-gha"
@@ -257,41 +257,6 @@ def build_bearer_getter() -> Callable[[], str]:
     return mgr.get_access_token
 
 # ===========================================================================
-# HEAD SHA resolution
-# ===========================================================================
-
-def _resolve_head_sha_from_source(source_path: str) -> str:
-    """Best-effort fallback to the checked-out repository's current HEAD SHA.
-
-    This does not change scan behavior. It is only used when neither
-    --head-sha nor GITHUB_SHA supplied a value.
-    """
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=source_path,
-            capture_output=True,
-            text=True,
-            timeout=10,
-            check=True,
-        )
-        sha = result.stdout.strip()
-        if sha:
-            logger.info(
-                "head_sha not provided — resolved from git HEAD: %s",
-                sha[:7],
-            )
-        return sha
-    except Exception as exc:
-        logger.debug(
-            "Could not resolve HEAD SHA from %s: %s",
-            source_path,
-            exc,
-        )
-        return ""
-
-
-# ===========================================================================
 # File collection
 # ===========================================================================
 
@@ -345,14 +310,33 @@ def create_batch_archive(
     run_id: str = "",
     manifest_files: Optional[List[str]] = None,
 ) -> str:
-    archive_path = os.path.join(archive_dir, f"repo_scan_batch_{batch_index}.zip")
-    extra_manifests = [m for m in (manifest_files or []) if m not in file_subset]
+    """Create the SCM archive expected by the current DEV backend.
+
+    The original working scanner created ZIP files. The current DEV SCM
+    analyze path expects a gzip-compressed tar archive, while keeping the
+    exact same files and user_metadata.json payload.
+    """
+    archive_path = os.path.join(
+        archive_dir,
+        f"repo_scan_batch_{batch_index}.tar.gz",
+    )
+
+    extra_manifests = [
+        m for m in (manifest_files or [])
+        if m not in file_subset
+    ]
     all_files = list(file_subset) + extra_manifests
-    with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as zf:
+
+    with tarfile.open(archive_path, "w:gz") as tf:
         for rel_path in all_files:
             full_path = os.path.join(source_dir, rel_path)
             if os.path.isfile(full_path):
-                zf.write(full_path, rel_path)
+                tf.add(
+                    full_path,
+                    arcname=rel_path,
+                    recursive=False,
+                )
+
         metadata = {
             "scan_source": "gha_repo_scan",
             "repo": source_code_repo,
@@ -363,13 +347,31 @@ def create_batch_archive(
             "batch_file_count": len(file_subset),
             "manifest_file_count": len(extra_manifests),
         }
-        zf.writestr("user_metadata.json", json.dumps(metadata, indent=2))
+
+        metadata_bytes = json.dumps(
+            metadata,
+            indent=2,
+        ).encode("utf-8")
+
+        metadata_info = tarfile.TarInfo("user_metadata.json")
+        metadata_info.size = len(metadata_bytes)
+        metadata_info.mtime = int(time.time())
+
+        tf.addfile(
+            metadata_info,
+            io.BytesIO(metadata_bytes),
+        )
+
     size_kb = os.path.getsize(archive_path) // 1024
     logger.info(
-        "Batch archive #%d: %d files + %d manifests, %d KB",
-        batch_index, len(file_subset), len(extra_manifests), size_kb,
+        "Batch archive #%d: %d files + %d manifests, %d KB (tar.gz)",
+        batch_index,
+        len(file_subset),
+        len(extra_manifests),
+        size_kb,
     )
     return archive_path
+
 
 
 def _batch_size(total_files: int) -> int:
@@ -394,7 +396,7 @@ def _upload_to_s3(presigned_url: str, archive_path: str) -> None:
     with open(archive_path, "rb") as f:
         req = urllib.request.Request(
             presigned_url, data=f.read(), method="PUT",
-            headers={"Content-Type": "application/zip"},
+            headers={"Content-Type": "application/gzip"},
         )
         with urllib.request.urlopen(req) as resp:
             if resp.status not in (200, 204):
@@ -419,7 +421,16 @@ def _run_mcp_scan_via_client(
     branch: str,
     files_to_scan: List[str],
     archive_path: str,
+    head_sha: str = "",
 ) -> Dict[str, Any]:
+    """Run the known-working MCP v1 flow with the current DEV SCM signal.
+
+    The MCP request itself remains the old working implementation:
+    ``streamablehttp_client`` + ``ClientSession`` + text-content JSON parsing.
+
+    The only transport addition is ``X-Unifai-Commit-Sha``, which tells the
+    current DEV backend this is an SCM/CI scan instead of an IDE scan.
+    """
     from mcp.client.streamable_http import streamablehttp_client
     from mcp import ClientSession
 
@@ -429,18 +440,36 @@ def _run_mcp_scan_via_client(
             "branch_or_tag": branch,
             "files_to_scan": files_to_scan,
         }
+
+        scm_headers: Dict[str, str] = {}
+        if head_sha:
+            scm_headers["X-Unifai-Commit-Sha"] = head_sha
+
         tok1 = bearer_getter()
         async with streamablehttp_client(
-            server_url, headers={"Authorization": f"Bearer {tok1}"},
+            server_url,
+            headers={
+                "Authorization": f"Bearer {tok1}",
+                **scm_headers,
+            },
         ) as (read, write, _):
             async with ClientSession(read, write) as session:
                 await session.initialize()
                 logger.info("MCP step 1/3: get_upload_url")
+
                 upload_result = _parse_tool_result(
-                    await session.call_tool("get_upload_url", arguments=upload_args)
+                    await session.call_tool(
+                        "get_upload_url",
+                        arguments=upload_args,
+                    )
                 )
+
                 if not upload_result.get("success"):
-                    raise RuntimeError(f"get_upload_url failed: {upload_result.get('error', upload_result)}")
+                    raise RuntimeError(
+                        f"get_upload_url failed: "
+                        f"{upload_result.get('error', upload_result)}"
+                    )
+
                 archive_id = upload_result["archive_id"]
                 presigned_url = upload_result["presigned_url"]
 
@@ -448,20 +477,35 @@ def _run_mcp_scan_via_client(
         _upload_to_s3(presigned_url, archive_path)
 
         tok2 = bearer_getter()
-        sse_timeout = int(os.environ.get("UNIFAI_MCP_SSE_READ_TIMEOUT", "1800"))
+        sse_timeout = int(
+            os.environ.get("UNIFAI_MCP_SSE_READ_TIMEOUT", "1800")
+        )
+
         async with streamablehttp_client(
             server_url,
-            headers={"Authorization": f"Bearer {tok2}"},
+            headers={
+                "Authorization": f"Bearer {tok2}",
+                **scm_headers,
+            },
             sse_read_timeout=sse_timeout,
         ) as (read2, write2, _):
             async with ClientSession(read2, write2) as session2:
                 await session2.initialize()
-                logger.info("MCP step 3/3: analyze_uploaded_archive (timeout=%ds)", sse_timeout)
+                logger.info(
+                    "MCP step 3/3: analyze_uploaded_archive (timeout=%ds)",
+                    sse_timeout,
+                )
+
                 analyze_args = dict(upload_args)
                 analyze_args["archive_id"] = archive_id
+
                 result = _parse_tool_result(
-                    await session2.call_tool("analyze_uploaded_archive", arguments=analyze_args)
+                    await session2.call_tool(
+                        "analyze_uploaded_archive",
+                        arguments=analyze_args,
+                    )
                 )
+
                 return result
 
     return asyncio.run(_scan())
@@ -474,9 +518,25 @@ def run_mcp_scan(
     branch: str,
     files_to_scan: List[str],
     archive_path: str,
+    head_sha: str = "",
 ) -> Dict[str, Any]:
-    logger.info("MCP scan: %d files, repo=%s, branch=%s", len(files_to_scan), source_code_repo, branch)
-    return _run_mcp_scan_via_client(server_url, bearer_getter, source_code_repo, branch, files_to_scan, archive_path)
+    logger.info(
+        "MCP scan: %d files, repo=%s, branch=%s",
+        len(files_to_scan),
+        source_code_repo,
+        branch,
+    )
+
+    return _run_mcp_scan_via_client(
+        server_url,
+        bearer_getter,
+        source_code_repo,
+        branch,
+        files_to_scan,
+        archive_path,
+        head_sha=head_sha,
+    )
+
 
 # ===========================================================================
 # Parallel batch scan
@@ -510,7 +570,15 @@ def parallel_batch_scan(
             source_code_repo, branch, head_sha, batch_idx, run_id=run_id,
             manifest_files=manifest_files,
         )
-        result = run_mcp_scan(server_url, bearer_getter, source_code_repo, branch, batch_files, archive_path)
+        result = run_mcp_scan(
+            server_url,
+            bearer_getter,
+            source_code_repo,
+            branch,
+            batch_files,
+            archive_path,
+            head_sha=head_sha,
+        )
         return batch_idx, result
 
     def _collect(batch_idx: int, mcp_result: Dict[str, Any]) -> None:
@@ -542,21 +610,8 @@ def parallel_batch_scan(
                 _collect(batch_idx, mcp_result)
             except BaseException as exc:
                 failed_batch_count += 1
-
-                # Async MCP failures can arrive wrapped in ExceptionGroup /
-                # TaskGroup errors. Surface the innermost useful cause.
-                cause = exc
-                if hasattr(cause, "exceptions") and cause.exceptions:
-                    cause = cause.exceptions[0]
-                    if hasattr(cause, "exceptions") and cause.exceptions:
-                        cause = cause.exceptions[0]
-
-                detail = (
-                    f"Batch {batch_idx}/{len(batches)} failed: "
-                    f"{type(cause).__name__}: {cause}"
-                )
+                detail = f"Batch {batch_idx}/{len(batches)} failed: {exc}"
                 logger.error("%s", detail)
-                logger.debug("Full exception:", exc_info=exc)
                 failure_details.append(detail)
 
     return all_remediation_actions, all_reports, all_aibom, failed_batch_count, failure_details
@@ -838,13 +893,6 @@ def _create_fix_pr(
     if not validated_fixes:
         return None, ""
 
-    if not head_sha:
-        logger.error(
-            "Cannot create remediation branch: head_sha is empty. "
-            "Pass --head-sha or ensure GITHUB_SHA is available."
-        )
-        return None, ""
-
     safe_branch = re.sub(r"[^a-zA-Z0-9._/-]", "-", branch)
     sha_short = head_sha[:7]
     timestamp = time.strftime("%m%d%H%M")
@@ -927,19 +975,13 @@ def _create_fix_pr(
 
 def _execute_scan(args: argparse.Namespace) -> int:
     logger.info("Scanner build: %s", SCANNER_BUILD)
-
     repo = args.repo or os.environ.get("GITHUB_REPOSITORY", "")
     branch = args.branch or os.environ.get("GITHUB_REF_NAME", "")
     head_sha = args.head_sha or os.environ.get("GITHUB_SHA", "")
     source_path = os.path.abspath(args.source_path)
     server_url = args.mcp_server_url or os.environ.get("MCP_SERVER_URL", "") or MCP_SERVER_URL
     source_code_repo = f"https://github.com/{repo}.git" if repo else source_path
-
     logger.info("Effective MCP server URL: %s", server_url)
-
-    # If the workflow did not supply a commit SHA, use the checked-out repo.
-    if not head_sha:
-        head_sha = _resolve_head_sha_from_source(source_path)
 
     # Validate config
     missing = [n for n, v in [("GITHUB_REPOSITORY / --repo", repo), ("GITHUB_REF_NAME / --branch", branch)] if not v]
@@ -952,32 +994,11 @@ def _execute_scan(args: argparse.Namespace) -> int:
         print_human_output(output)
         return 2
 
-    if getattr(args, "create_fix_pr", False) and not head_sha:
-        output = build_json_output(
-            status="error",
-            repo=repo,
-            branch=branch,
-            head_sha=head_sha,
-            source_code_repo=source_code_repo,
-            files_scanned=0,
-            batches=0,
-            failed_batches=0,
-            violations=[],
-            scan_errors=[
-                "Missing GITHUB_SHA / --head-sha required for --create-fix-pr"
-            ],
-        )
-        print_human_output(output)
-        return 2
-
     try:
         bearer_getter = build_bearer_getter()
-        # Eagerly fetch a token at startup to catch auth errors early.
-        access_token = bearer_getter()
-        logger.info(
-            "Auth OK — renew-access-token exchange succeeded (token len=%d)",
-            len(access_token),
-        )
+        # Eagerly fetch a token at startup to catch auth errors early
+        bearer_getter()
+        logger.info("Auth OK — LINEAJE_PAT_TOKEN accepted")
     except Exception as exc:
         output = build_json_output(
             status="error", repo=repo, branch=branch, head_sha=head_sha,
