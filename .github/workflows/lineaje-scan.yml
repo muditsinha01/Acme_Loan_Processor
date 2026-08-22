@@ -138,7 +138,12 @@ jobs:
         env:
           LINEAJE_PAT_TOKEN: ${{ secrets.LINEAJE_PAT_TOKEN }}
           GH_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
-          MCP_SERVER_URL: ${{ vars.MCP_SERVER_URL }}
+          # Dev (commercialdev) environment. If your PAT is a dev *refresh* token,
+          # also set the LINEAJE_RENEW_ACCESS_TOKEN_URL repo variable to the dev
+          # identity service's renew-access-token URL, or token exchange hits prod
+          # and fails. (Not needed if the PAT is already a short-lived access token.)
+          MCP_SERVER_URL: https://mcp.commercialdev.dev.veedna.com/mcp
+          LINEAJE_RENEW_ACCESS_TOKEN_URL: ${{ vars.LINEAJE_RENEW_ACCESS_TOKEN_URL }}
           SOURCE_PATH: ${{ steps.subject.outputs.source_path }}
           TARGET_REPO: ${{ steps.resolve.outputs.target_repo }}
           BRANCH: ${{ steps.resolve.outputs.branch }}
