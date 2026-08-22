@@ -1,10 +1,9 @@
 name: Lineaje AI Scan
 
 # Three ways to run:
-#   1. Automatically on every PR (scans the PR's head commit).
-#   2. On demand against the WHOLE repo   (workflow_dispatch, scan_mode=repo).
-#   3. On demand against a SINGLE file    (workflow_dispatch, scan_mode=file).
-# On-demand runs can target this repo or any other repo/branch you have a token for.
+#   1. Automatically on every PR.
+#   2. On demand against the whole repo.
+#   3. On demand against a single file.
 on:
   pull_request:
     types: [opened, synchronize, reopened]
@@ -16,18 +15,22 @@ on:
         type: choice
         options: [repo, file]
         default: repo
+
       target_repo:
         description: "owner/repo to scan (blank = this repo)"
         required: false
         default: ""
+
       ref:
         description: "Branch, tag, or SHA to scan (blank = default branch)"
         required: false
         default: ""
+
       file_path:
         description: "Path to a single file to scan (scan_mode=file only)"
         required: false
         default: ""
+
       create_fix_pr:
         description: "Open a remediation PR with auto-fixes"
         type: boolean
@@ -42,7 +45,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # The scanner script lives in THIS repo at .github/lineaje_ai_scan.py
+      # Scanner lives in this repository.
       - name: Checkout scanner scripts
         uses: actions/checkout@v4
         with:
@@ -73,7 +76,9 @@ jobs:
             scan_mode="${IN_SCAN_MODE:-repo}"
             target_repo="${IN_TARGET_REPO:-$THIS_REPO}"
 
-            [ -z "$target_repo" ] && target_repo="$THIS_REPO"
+            if [ -z "$target_repo" ]; then
+              target_repo="$THIS_REPO"
+            fi
 
             ref="$IN_REF"
             branch="$IN_REF"
@@ -90,7 +95,7 @@ jobs:
             echo "create_fix_pr=$create_fix_pr"
           } >> "$GITHUB_OUTPUT"
 
-      # Check out the code that will actually be scanned.
+      # Checkout the repository/code to scan.
       - name: Checkout target code
         uses: actions/checkout@v4
         with:
@@ -99,7 +104,7 @@ jobs:
           path: target
           token: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
 
-      # For single-file mode, isolate only that file.
+      # For single-file mode, isolate only the requested file.
       - name: Prepare scan subject
         id: subject
         env:
@@ -134,7 +139,7 @@ jobs:
         with:
           python-version: "3.11"
 
-      # Keep the known v1 SDK pinned while debugging the network connection.
+      # Pin the MCP version currently used by the scanner.
       - name: Install dependencies
         run: |
           set -euo pipefail
@@ -144,69 +149,36 @@ jobs:
 
           python -c "import importlib.metadata; print('MCP version:', importlib.metadata.version('mcp'))"
 
-      # Diagnostic only.
-      # A quick HTTP response such as 401/404/405 is GOOD here:
-      # it proves the GitHub runner can reach the server.
-      - name: Test MCP connectivity
+      # Quick connectivity check.
+      # An HTTP error such as 401/405 is OK here — it proves the endpoint
+      # is reachable from the GitHub runner.
+      - name: Test DEV MCP connectivity
         run: |
-          echo "=========================================="
-          echo "DEV DNS"
-          echo "=========================================="
+          set -euo pipefail
 
-          getent hosts mcp.commercialdev.dev.veedna.com || true
-
-          echo ""
-          echo "=========================================="
-          echo "DEV MCP - IPv4"
-          echo "=========================================="
+          echo "Testing DEV MCP endpoint..."
 
           curl -4 -sv \
             --connect-timeout 10 \
             --max-time 20 \
-            https://mcp.commercialdev.dev.veedna.com/mcp \
+            https://mcp.commercialdev.dev.veedna.com/mcp/ \
             -o /dev/null || true
 
-          echo ""
-          echo "=========================================="
-          echo "PROD DNS"
-          echo "=========================================="
-
-          getent hosts mcp.v2.prod.veedna.com || true
-
-          echo ""
-          echo "=========================================="
-          echo "PROD MCP - IPv4"
-          echo "=========================================="
-
-          curl -4 -sv \
-            --connect-timeout 10 \
-            --max-time 20 \
-            https://mcp.v2.prod.veedna.com/mcp \
-            -o /dev/null || true
-
-          echo ""
-          echo "=========================================="
-          echo "DEV MCP - IPv6"
-          echo "=========================================="
-
-          curl -6 -sv \
-            --connect-timeout 10 \
-            --max-time 20 \
-            https://mcp.commercialdev.dev.veedna.com/mcp \
-            -o /dev/null || true
-
-      # Report-only gate: policy violations do not block the PR.
-      # Real scanner/runtime errors still fail this step.
+      # Run the Lineaje AI policy scan.
+      #
+      # Policy violations themselves are report-only.
+      # Actual scanner errors still fail this step.
       - name: Run Lineaje AI policy scan
         env:
           LINEAJE_PAT_TOKEN: ${{ secrets.LINEAJE_PAT_TOKEN }}
+
           GH_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
 
-          # DEV MCP environment
-          MCP_SERVER_URL: https://mcp.commercialdev.dev.veedna.com/mcp
+          # IMPORTANT:
+          # Keep the trailing slash.
+          MCP_SERVER_URL: https://mcp.commercialdev.dev.veedna.com/mcp/
 
-          # Must point to the corresponding DEV identity service when using
-          # a DEV refresh token.
+          # DEV identity-service renew-access-token endpoint.
           LINEAJE_RENEW_ACCESS_TOKEN_URL: ${{ vars.LINEAJE_RENEW_ACCESS_TOKEN_URL }}
 
           SOURCE_PATH: ${{ steps.subject.outputs.source_path }}
@@ -227,10 +199,13 @@ jobs:
 
           if [ -z "$BRANCH_ARG" ]; then
             BRANCH_ARG="$(git -C target rev-parse --abbrev-ref HEAD)"
-            [ "$BRANCH_ARG" = "HEAD" ] && BRANCH_ARG="detached"
+
+            if [ "$BRANCH_ARG" = "HEAD" ]; then
+              BRANCH_ARG="detached"
+            fi
           fi
 
-          echo "Using MCP server: $MCP_SERVER_URL"
+          echo "MCP server: $MCP_SERVER_URL"
           echo "Target repo: $TARGET_REPO"
           echo "Branch: $BRANCH_ARG"
           echo "Head SHA: $HEAD_SHA"
@@ -243,7 +218,7 @@ jobs:
             "${FLAGS[@]}" \
             | tee scan_result.txt
 
-      # List every violation directly on the PR as a comment.
+      # Post the report on the PR.
       - name: Comment scan results on the PR
         if: always() && github.event_name == 'pull_request'
         continue-on-error: true
@@ -275,7 +250,9 @@ jobs:
           if [ -f scan_result.txt ]; then
             cat scan_result.txt >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "## Lineaje AI Scan" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "Scanner did not produce a result file." >> "$GITHUB_STEP_SUMMARY"
+            {
+              echo "## Lineaje AI Scan"
+              echo ""
+              echo "Scanner did not produce a result file."
+            } >> "$GITHUB_STEP_SUMMARY"
           fi
