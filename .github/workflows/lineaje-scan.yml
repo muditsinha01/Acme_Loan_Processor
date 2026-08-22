@@ -1,0 +1,186 @@
+name: Lineaje AI Scan
+
+# Three ways to run:
+#   1. Automatically on every PR (scans the PR's head commit).
+#   2. On demand against the WHOLE repo   (workflow_dispatch, scan_mode=repo).
+#   3. On demand against a SINGLE file    (workflow_dispatch, scan_mode=file).
+# On-demand runs can target this repo or any other repo/branch you have a token for.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+  workflow_dispatch:
+    inputs:
+      scan_mode:
+        description: "Scan the whole repo or a single file"
+        type: choice
+        options: [repo, file]
+        default: repo
+      target_repo:
+        description: "owner/repo to scan (blank = this repo)"
+        required: false
+        default: ""
+      ref:
+        description: "Branch, tag, or SHA to scan (blank = default branch)"
+        required: false
+        default: ""
+      file_path:
+        description: "Path to a single file to scan (scan_mode=file only)"
+        required: false
+        default: ""
+      create_fix_pr:
+        description: "Open a remediation PR with auto-fixes"
+        type: boolean
+        default: false
+
+# contents:write + pull-requests:write are only needed when create_fix_pr is used.
+# They are harmless otherwise. Note: on PRs from forks the token is read-only,
+# so remediation PRs will not be created for fork PRs.
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  lineaje-scan:
+    runs-on: ubuntu-latest
+    steps:
+      # The scanner script lives in THIS repo at .github/lineaje_ai_scan.py
+      - name: Checkout scanner scripts (this repo)
+        uses: actions/checkout@v4
+        with:
+          path: scanner
+
+      # Inputs are passed via env (never inlined into run:) to avoid script injection.
+      - name: Resolve scan parameters
+        id: resolve
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          IN_SCAN_MODE: ${{ inputs.scan_mode }}
+          IN_TARGET_REPO: ${{ inputs.target_repo }}
+          IN_REF: ${{ inputs.ref }}
+          IN_FILE_PATH: ${{ inputs.file_path }}
+          IN_CREATE_FIX_PR: ${{ inputs.create_fix_pr }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          THIS_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            scan_mode="repo"
+            target_repo="$THIS_REPO"
+            ref="$PR_HEAD_REF"
+            branch="$PR_HEAD_REF"
+            file_path=""
+            create_fix_pr="false"
+          else
+            scan_mode="${IN_SCAN_MODE:-repo}"
+            target_repo="${IN_TARGET_REPO:-$THIS_REPO}"
+            [ -z "$target_repo" ] && target_repo="$THIS_REPO"
+            ref="$IN_REF"
+            branch="$IN_REF"
+            file_path="$IN_FILE_PATH"
+            create_fix_pr="${IN_CREATE_FIX_PR:-false}"
+          fi
+          {
+            echo "scan_mode=$scan_mode"
+            echo "target_repo=$target_repo"
+            echo "ref=$ref"
+            echo "branch=$branch"
+            echo "file_path=$file_path"
+            echo "create_fix_pr=$create_fix_pr"
+          } >> "$GITHUB_OUTPUT"
+
+      # Check out the code to be scanned. GH_TOKEN (a PAT) is required to reach a
+      # DIFFERENT repo; for this repo GITHUB_TOKEN is enough.
+      - name: Checkout target code
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ steps.resolve.outputs.target_repo }}
+          ref: ${{ steps.resolve.outputs.ref }}
+          path: target
+          token: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
+
+      # For single-file mode, isolate just that file (keeping its path) so the
+      # scanner only sees one file — no script change needed.
+      - name: Prepare scan subject
+        id: subject
+        env:
+          SCAN_MODE: ${{ steps.resolve.outputs.scan_mode }}
+          FILE_PATH: ${{ steps.resolve.outputs.file_path }}
+        run: |
+          set -euo pipefail
+          if [ "$SCAN_MODE" = "file" ]; then
+            if [ -z "$FILE_PATH" ]; then
+              echo "::error::scan_mode=file requires file_path"; exit 1
+            fi
+            if [ ! -f "target/$FILE_PATH" ]; then
+              echo "::error::File not found in target repo: $FILE_PATH"; exit 1
+            fi
+            mkdir -p "subject/$(dirname "$FILE_PATH")"
+            cp "target/$FILE_PATH" "subject/$FILE_PATH"
+            echo "source_path=subject" >> "$GITHUB_OUTPUT"
+          else
+            echo "source_path=target" >> "$GITHUB_OUTPUT"
+          fi
+          echo "head_sha=$(git -C target rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install mcp
+
+      # Report-only gate: the scanner exits 0 even when violations are found, so a
+      # PR is never blocked — violations are listed, not enforced. (A real scan
+      # ERROR, e.g. auth/MCP failure, still fails the step so you notice it.)
+      - name: Run Lineaje AI policy scan
+        env:
+          LINEAJE_PAT_TOKEN: ${{ secrets.LINEAJE_PAT_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
+          MCP_SERVER_URL: ${{ vars.MCP_SERVER_URL }}
+          SOURCE_PATH: ${{ steps.subject.outputs.source_path }}
+          TARGET_REPO: ${{ steps.resolve.outputs.target_repo }}
+          BRANCH: ${{ steps.resolve.outputs.branch }}
+          HEAD_SHA: ${{ steps.subject.outputs.head_sha }}
+          CREATE_FIX_PR: ${{ steps.resolve.outputs.create_fix_pr }}
+        run: |
+          set -euo pipefail
+          FLAGS=()
+          if [ "$CREATE_FIX_PR" = "true" ]; then
+            FLAGS+=(--create-fix-pr)
+          fi
+          BRANCH_ARG="$BRANCH"
+          if [ -z "$BRANCH_ARG" ]; then
+            BRANCH_ARG="$(git -C target rev-parse --abbrev-ref HEAD)"
+            [ "$BRANCH_ARG" = "HEAD" ] && BRANCH_ARG="detached"
+          fi
+          python scanner/.github/lineaje_ai_scan.py \
+            --source-path "$SOURCE_PATH" \
+            --repo "$TARGET_REPO" \
+            --branch "$BRANCH_ARG" \
+            --head-sha "$HEAD_SHA" \
+            "${FLAGS[@]}" \
+            | tee scan_result.txt
+
+      # List every violation directly on the PR as a comment (non-blocking).
+      # Skipped automatically for fork PRs, where the token can't comment.
+      - name: Comment scan results on the PR
+        if: always() && github.event_name == 'pull_request'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          # GitHub comment cap is 65536 chars; truncate defensively.
+          head -c 60000 scan_result.txt > comment_body.md
+          if [ "$(wc -c < scan_result.txt)" -gt 60000 ]; then
+            printf '\n\n_…report truncated; see the full job summary._\n' >> comment_body.md
+          fi
+          gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file comment_body.md
+
+      - name: Publish scan result to job summary
+        if: always()
+        run: cat scan_result.txt >> "$GITHUB_STEP_SUMMARY"
