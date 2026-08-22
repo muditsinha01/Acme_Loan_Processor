@@ -74,6 +74,7 @@ logger = logging.getLogger("gha_repo_scan")
 # ===========================================================================
 
 MCP_SERVER_URL = "https://mcp.v2.prod.veedna.com/mcp"
+SCANNER_BUILD = "2026-08-22-response-parser-v4"
 
 MAX_SCAN_WORKERS = 4
 REMEDIATION_BRANCH_PREFIX = "remediation/unifai-gha"
@@ -496,14 +497,249 @@ def _upload_to_s3(presigned_url: str, archive_path: str) -> None:
     logger.info("S3 upload complete")
 
 
-def _parse_tool_result(result: Any) -> dict:
-    if hasattr(result, "content") and result.content:
-        raw = result.content[0].text if hasattr(result.content[0], "text") else str(result.content[0])
+def _strip_json_fence(value: str) -> str:
+    """Remove a Markdown JSON/code fence if the MCP server wrapped JSON in one."""
+    text = (value or "").strip()
+    if not text.startswith("```"):
+        return text
+
+    lines = text.splitlines()
+    if lines and lines[0].strip().startswith("```"):
+        lines = lines[1:]
+    if lines and lines[-1].strip() == "```":
+        lines = lines[:-1]
+    return "\n".join(lines).strip()
+
+
+def _json_unwrap(value: Any, *, max_depth: int = 8) -> Any:
+    """Decode JSON strings recursively and unwrap common response envelopes."""
+    current = value
+
+    for _ in range(max_depth):
+        if isinstance(current, str):
+            candidate = _strip_json_fence(current)
+            if not candidate:
+                return current
+            try:
+                current = json.loads(candidate)
+                continue
+            except (json.JSONDecodeError, TypeError):
+                return current
+
+        if not isinstance(current, dict):
+            return current
+
+        wrapper_keys = (
+            "result",
+            "results",
+            "data",
+            "output",
+            "response",
+            "payload",
+            "analysis",
+            "scan_result",
+            "scanResult",
+        )
+
+        known_keys = {
+            "status",
+            "success",
+            "error",
+            "message",
+            "archive_id",
+            "archiveId",
+            "presigned_url",
+            "presignedUrl",
+            "remediation_actions",
+            "remediationActions",
+            "violations",
+            "policy_violations",
+            "policyViolations",
+            "findings",
+            "aibom",
+            "aiBom",
+            "AIBOM",
+            "report",
+            "report_markdown",
+            "reportMarkdown",
+        }
+
+        if any(key in current for key in known_keys - {"success", "message"}):
+            return current
+
+        unwrapped = False
+        for key in wrapper_keys:
+            if key not in current:
+                continue
+
+            nested = _json_unwrap(current[key], max_depth=max_depth - 1)
+            if isinstance(nested, dict):
+                merged = dict(nested)
+                for meta_key in ("success", "status", "error", "message"):
+                    if meta_key in current and meta_key not in merged:
+                        merged[meta_key] = current[meta_key]
+                current = merged
+                unwrapped = True
+                break
+
+        if unwrapped:
+            continue
+
+        return current
+
+    return current
+
+
+def _normalize_mcp_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalize naming differences used by different Lineaje/MCP server versions."""
+    data = dict(payload)
+
+    aliases = {
+        "archiveId": "archive_id",
+        "presignedUrl": "presigned_url",
+        "remediationActions": "remediation_actions",
+        "policy_violations": "violations",
+        "policyViolations": "violations",
+        "findings": "violations",
+        "aiBom": "aibom",
+        "AIBOM": "aibom",
+        "report_markdown": "report",
+        "reportMarkdown": "report",
+        "scanStatus": "status",
+    }
+
+    for source_key, target_key in aliases.items():
+        if target_key not in data and source_key in data:
+            data[target_key] = data[source_key]
+
+    if not data.get("remediation_actions") and isinstance(data.get("violations"), list):
+        data["remediation_actions"] = data["violations"]
+
+    return data
+
+
+def _tool_result_text(result: Any) -> str:
+    """Return all textual MCP content blocks for diagnostics."""
+    blocks: List[str] = []
+    for block in (getattr(result, "content", None) or []):
+        block_text = getattr(block, "text", None)
+        if block_text is not None:
+            blocks.append(str(block_text))
+    return "\n".join(blocks).strip()
+
+
+def _parse_tool_result(result: Any, *, tool_name: str = "MCP tool") -> dict:
+    """Parse MCP CallToolResult safely.
+
+    MCP 1.14+ supports structuredContent in addition to textual content.
+    Older/custom implementations may put JSON in one or more text blocks.
+    Unknown output is returned as a parse error so it cannot become a false
+    "0 violations => compliant" result.
+    """
+    if result is None:
+        return {
+            "_parse_error": f"{tool_name} returned no result",
+            "raw": "",
+        }
+
+    raw_text = _tool_result_text(result)
+
+    is_error = bool(
+        getattr(result, "isError", False)
+        or getattr(result, "is_error", False)
+    )
+    if is_error:
+        return {
+            "_parse_error": f"{tool_name} returned isError=true",
+            "raw": raw_text,
+        }
+
+    structured = getattr(result, "structuredContent", None)
+    if structured is None:
+        structured = getattr(result, "structured_content", None)
+
+    if structured is not None:
+        decoded = _json_unwrap(structured)
+        if isinstance(decoded, dict):
+            return _normalize_mcp_payload(decoded)
+
+    parsed_dicts: List[Dict[str, Any]] = []
+    for block in (getattr(result, "content", None) or []):
+        block_text = getattr(block, "text", None)
+        if block_text is None:
+            continue
+
+        decoded = _json_unwrap(str(block_text))
+        if isinstance(decoded, dict):
+            parsed_dicts.append(_normalize_mcp_payload(decoded))
+
+    if parsed_dicts:
+        merged: Dict[str, Any] = {}
+
+        for item in parsed_dicts:
+            for key, value in item.items():
+                if key in {"remediation_actions", "violations", "aibom"} and isinstance(value, list):
+                    existing = merged.get(key)
+                    if isinstance(existing, list):
+                        existing.extend(value)
+                    else:
+                        merged[key] = list(value)
+                elif key == "report" and value:
+                    if merged.get("report"):
+                        merged["report"] = f"{merged['report']}\n\n{value}"
+                    else:
+                        merged["report"] = value
+                else:
+                    merged[key] = value
+
+        return _normalize_mcp_payload(merged)
+
+    if hasattr(result, "model_dump"):
         try:
-            return json.loads(raw)
-        except (json.JSONDecodeError, TypeError):
-            return {"raw": raw}
-    return {"raw": "empty response"}
+            dumped = result.model_dump(by_alias=True)
+        except Exception:
+            dumped = None
+
+        if isinstance(dumped, dict):
+            for key in ("structuredContent", "structured_content"):
+                candidate = dumped.get(key)
+                if candidate is not None:
+                    decoded = _json_unwrap(candidate)
+                    if isinstance(decoded, dict):
+                        return _normalize_mcp_payload(decoded)
+
+    return {
+        "_parse_error": f"{tool_name} response contained no recognized JSON payload",
+        "raw": raw_text,
+    }
+
+
+def _require_parsed_tool_result(
+    result: Dict[str, Any],
+    *,
+    tool_name: str,
+    required_any: Tuple[str, ...],
+) -> Dict[str, Any]:
+    """Fail closed when an MCP response cannot be understood."""
+    if not isinstance(result, dict):
+        raise RuntimeError(
+            f"{tool_name} returned unexpected type: {type(result).__name__}"
+        )
+
+    if "_parse_error" in result:
+        raw = str(result.get("raw", "")).strip()
+        raw_preview = raw[:4000] if raw else "(empty)"
+        raise RuntimeError(
+            f"{result['_parse_error']}; raw response: {raw_preview}"
+        )
+
+    if not any(key in result for key in required_any):
+        safe_keys = sorted(str(key) for key in result.keys())
+        raise RuntimeError(
+            f"{tool_name} returned an unexpected response shape; keys={safe_keys}"
+        )
+
+    return result
 
 
 def _run_mcp_scan_via_client(
@@ -593,15 +829,33 @@ def _run_mcp_scan_via_client(
             async with ClientSession(read, write) as session:
                 await session.initialize()
                 logger.info("MCP step 1/3: get_upload_url")
-                upload_result = _parse_tool_result(
-                    await session.call_tool("get_upload_url", arguments=upload_args)
+                raw_upload_result = await session.call_tool(
+                    "get_upload_url",
+                    arguments=upload_args,
                 )
-                if not upload_result.get("success"):
+                upload_result = _parse_tool_result(
+                    raw_upload_result,
+                    tool_name="get_upload_url",
+                )
+                upload_result = _require_parsed_tool_result(
+                    upload_result,
+                    tool_name="get_upload_url",
+                    required_any=("archive_id", "presigned_url", "success", "error"),
+                )
+
+                if upload_result.get("success") is False:
                     raise RuntimeError(
-                        f"get_upload_url failed: {upload_result.get('error', upload_result)}"
+                        f"get_upload_url failed: "
+                        f"{upload_result.get('error') or upload_result.get('message') or upload_result}"
                     )
-                archive_id = upload_result["archive_id"]
-                presigned_url = upload_result["presigned_url"]
+
+                archive_id = upload_result.get("archive_id")
+                presigned_url = upload_result.get("presigned_url")
+                if not archive_id or not presigned_url:
+                    raise RuntimeError(
+                        "get_upload_url response missing archive_id/presigned_url; "
+                        f"keys={sorted(upload_result.keys())}"
+                    )
 
         logger.info("MCP step 2/3: upload to S3")
         _upload_to_s3(presigned_url, archive_path)
@@ -623,12 +877,44 @@ def _run_mcp_scan_via_client(
                 )
                 analyze_args = dict(upload_args)
                 analyze_args["archive_id"] = archive_id
-                result = _parse_tool_result(
-                    await session2.call_tool(
-                        "analyze_uploaded_archive",
-                        arguments=analyze_args,
-                    )
+                raw_result = await session2.call_tool(
+                    "analyze_uploaded_archive",
+                    arguments=analyze_args,
                 )
+
+                result = _parse_tool_result(
+                    raw_result,
+                    tool_name="analyze_uploaded_archive",
+                )
+
+                if isinstance(result, dict):
+                    logger.info(
+                        "MCP analyze response keys: %s",
+                        sorted(str(key) for key in result.keys()),
+                    )
+
+                result = _require_parsed_tool_result(
+                    result,
+                    tool_name="analyze_uploaded_archive",
+                    required_any=(
+                        "status",
+                        "remediation_actions",
+                        "violations",
+                        "aibom",
+                        "report",
+                        "error",
+                    ),
+                )
+
+                if result.get("error") and not (
+                    result.get("remediation_actions")
+                    or result.get("violations")
+                    or result.get("report")
+                ):
+                    raise RuntimeError(
+                        f"analyze_uploaded_archive failed: {result.get('error')}"
+                    )
+
                 return result
 
     return asyncio.run(_scan())
@@ -686,19 +972,56 @@ def parallel_batch_scan(
         return batch_idx, result
 
     def _collect(batch_idx: int, mcp_result: Dict[str, Any]) -> None:
-        batch_actions = mcp_result.get("remediation_actions", [])
-        batch_report = mcp_result.get("report", "")
-        batch_aibom = mcp_result.get("aibom", [])
+        if not isinstance(mcp_result, dict):
+            raise RuntimeError(
+                f"Batch {batch_idx} MCP result is not an object: "
+                f"{type(mcp_result).__name__}"
+            )
+
+        if "_parse_error" in mcp_result:
+            raise RuntimeError(str(mcp_result["_parse_error"]))
+
+        batch_actions = (
+            mcp_result.get("remediation_actions")
+            or mcp_result.get("violations")
+            or []
+        )
+        batch_report = mcp_result.get("report") or ""
+        batch_aibom = mcp_result.get("aibom") or []
+
+        if not isinstance(batch_actions, list):
+            raise RuntimeError(
+                f"Batch {batch_idx} returned non-list violations/remediation_actions: "
+                f"{type(batch_actions).__name__}"
+            )
+        if not isinstance(batch_aibom, list):
+            raise RuntimeError(
+                f"Batch {batch_idx} returned non-list aibom: "
+                f"{type(batch_aibom).__name__}"
+            )
+
+        server_status = mcp_result.get("status", "unknown")
         logger.info(
             "Batch %d/%d done: status=%s violations=%d aibom=%d",
-            batch_idx, len(batches), mcp_result.get("status", "unknown"),
+            batch_idx, len(batches), server_status,
             len(batch_actions), len(batch_aibom),
         )
+
+        if str(server_status).strip().lower() in {
+            "error", "failed", "failure", "scan_error", "scan_failed"
+        }:
+            raise RuntimeError(
+                f"Batch {batch_idx} analyze response status={server_status}: "
+                f"{mcp_result.get('error') or mcp_result.get('message') or 'no error detail'}"
+            )
+
         with lock:
             all_remediation_actions.extend(batch_actions)
             if batch_report:
-                all_reports.append(batch_report)
+                all_reports.append(str(batch_report))
             for entry in batch_aibom:
+                if not isinstance(entry, dict):
+                    continue
                 key = (entry.get("name", ""), entry.get("source_file", ""))
                 if key not in aibom_seen:
                     aibom_seen.add(key)
@@ -1095,12 +1418,14 @@ def _create_fix_pr(
 # ===========================================================================
 
 def _execute_scan(args: argparse.Namespace) -> int:
+    logger.info("Scanner build: %s", SCANNER_BUILD)
     repo = args.repo or os.environ.get("GITHUB_REPOSITORY", "")
     branch = args.branch or os.environ.get("GITHUB_REF_NAME", "")
     head_sha = args.head_sha or os.environ.get("GITHUB_SHA", "")
     source_path = os.path.abspath(args.source_path)
     server_url = args.mcp_server_url or os.environ.get("MCP_SERVER_URL", "") or MCP_SERVER_URL
     source_code_repo = f"https://github.com/{repo}.git" if repo else source_path
+    logger.info("Effective MCP server URL: %s", server_url)
     do_clone = getattr(args, "clone", False)
     github_token = (
         getattr(args, "github_token", None)
