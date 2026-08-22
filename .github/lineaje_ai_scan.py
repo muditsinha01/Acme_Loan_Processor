@@ -7,7 +7,7 @@ GitHub-managed Ubuntu runner where the repository is pre-checked-out.
 
 Usage::
 
-    python scripts/gha_repo_scan.py --source-path repo --repo owner/repo --branch branch-name --mcp-server-url lineaje-mcp-server-url
+    python scripts/gha_repo_scan.py --source-path .
 
 Output (stdout, JSON)::
 
@@ -30,9 +30,7 @@ Output (stdout, JSON)::
 
 Required environment variable::
 
-    LINEAJE_PAT_TOKEN  — Lineaje refresh token (exchanged for short-lived access tokens
-                          via renew-access-token; override the endpoint with
-                          LINEAJE_RENEW_ACCESS_TOKEN_URL)
+    LINEAJE_PAT_TOKEN  — Lineaje refresh token (exchanged for short-lived access tokens)
 
 Exit codes::
 
@@ -45,7 +43,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import atexit
 import base64
 import fnmatch
 import json
@@ -53,7 +50,6 @@ import logging
 import os
 import pathlib
 import re
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -74,17 +70,13 @@ logger = logging.getLogger("gha_repo_scan")
 # ===========================================================================
 
 MCP_SERVER_URL = "https://mcp.v2.prod.veedna.com/mcp"
-SCANNER_BUILD = "2026-08-22-working-protocol-merged-v1"
+SCANNER_BUILD = "2026-08-22-old-working-plus-safe-v1"
 
 MAX_SCAN_WORKERS = 4
 REMEDIATION_BRANCH_PREFIX = "remediation/unifai-gha"
 DEFAULT_UNIFAI_FILE_BATCH_SIZE = 100
 
 _DEFAULT_LINEAJE_TOKEN_REFRESH_SKEW_SEC = 120
-
-# LINEAJE_PAT_TOKEN is a refresh token here — exchanged via renew-access-token
-# for a short-lived MCP bearer. Override the full URL with LINEAJE_RENEW_ACCESS_TOKEN_URL
-# (e.g. for commercialdev) if this prod default doesn't match your environment.
 _LINEAJE_NATIVE_RENEW_ACCESS_TOKEN_URL_PROD = (
     "https://lineaje-identity-service.v2.prod.veedna.com"
     "/lineajeidentity/api/v1/auth/native/renew-access-token"
@@ -193,8 +185,7 @@ def _identity_token_response_dict(raw_text: str, *, context: str) -> dict:
 
 
 class RefreshTokenTokenManager:
-    """Exchange LINEAJE_PAT_TOKEN (a refresh token) for short-lived MCP bearer tokens,
-    auto-renewing before expiry."""
+    """Exchange LINEAJE_PAT_TOKEN for short-lived MCP access tokens, auto-renewing before expiry."""
 
     def __init__(self, refresh_token: str, renew_access_token_url: Optional[str] = None) -> None:
         self._refresh_token = _normalize_token(refresh_token)
@@ -258,59 +249,10 @@ class RefreshTokenTokenManager:
         logger.debug("Access token renewed; expires in %ds", exp_sec)
 
 
-def _looks_like_jwt_blob(value: str) -> bool:
-    s = value.strip()
-    if s.count(".") != 2:
-        return False
-    hdr, payload, sig = s.split(".")
-    if len(hdr) < 10 or len(payload) < 10 or len(sig) < 10:
-        return False
-    seg = re.compile(r"^[A-Za-z0-9_-]+$")
-    return bool(seg.match(hdr) and seg.match(payload) and seg.match(sig))
-
-
-_STANDARD_BASE64_RE = re.compile(r"^[A-Za-z0-9+/]*={0,2}$")
-
-
-def _looks_like_already_usable_bearer(value: str) -> bool:
-    """True if *value* cannot possibly be the opaque, standard-Base64 refresh token
-    that ``renew-access-token`` expects — i.e. it should be used directly as the MCP
-    bearer instead of exchanged.
-
-    Covers both shapes seen in practice:
-      - a classic 3-part JWT (``_looks_like_jwt_blob``)
-      - any other token containing base64url-only characters (``-``/``_``) that make
-        it invalid *standard* Base64 — exchanging one of these fails server-side with
-        e.g. ``"Illegal base64 character 5f"`` (``_``), since the identity service
-        tries to base64-decode ``refreshToken`` using the standard alphabet and chokes
-        on the very first non-standard character.
-    """
-    s = value.strip()
-    if not s:
-        return False
-    if _looks_like_jwt_blob(s):
-        return True
-    return not bool(_STANDARD_BASE64_RE.match(s))
-
-
 def build_bearer_getter() -> Callable[[], str]:
-    """Return a callable that yields the MCP bearer, from LINEAJE_PAT_TOKEN.
-
-    LINEAJE_PAT_TOKEN holds one of two different things depending on how it was minted:
-    - A native **refresh token** (opaque, standard-Base64 string) — exchanged via
-      renew-access-token to obtain a short-lived access token before use.
-    - An already-short-lived **access token** (JWT, or any base64url-shaped token) —
-      usable directly. Sending one of these to renew-access-token's ``refreshToken``
-      param fails server-side ("Illegal base64 character 5f" etc.), since the identity
-      service tries to base64-decode it with the *standard* alphabet and chokes on
-      base64url's ``-``/``_`` or JWTs' internal ``.`` separators.
-    """
     pat = _normalize_token(os.environ.get("LINEAJE_PAT_TOKEN", ""))
     if not pat:
         raise RuntimeError("LINEAJE_PAT_TOKEN is not set")
-    if _looks_like_already_usable_bearer(pat):
-        logger.info("LINEAJE_PAT_TOKEN is already a usable access token — using directly as bearer")
-        return lambda: pat
     mgr = RefreshTokenTokenManager(pat)
     return mgr.get_access_token
 
@@ -319,71 +261,34 @@ def build_bearer_getter() -> Callable[[], str]:
 # ===========================================================================
 
 def _resolve_head_sha_from_source(source_path: str) -> str:
-    """Best-effort fallback: read HEAD's commit SHA straight from the git repo
-    at *source_path* when neither ``--head-sha`` nor ``$GITHUB_SHA`` was given.
+    """Best-effort fallback to the checked-out repository's current HEAD SHA.
 
-    Mirrors ``repo_scan.py``'s ``resolve_head_sha`` — since ``--source-path``
-    is already a checked-out git repo, there's no need to ask the caller for
-    a value git already knows. Returns "" (not raised) on any failure, so
-    the normal "missing config" error still fires with a clear message.
+    This does not change scan behavior. It is only used when neither
+    --head-sha nor GITHUB_SHA supplied a value.
     """
     try:
         result = subprocess.run(
             ["git", "rev-parse", "HEAD"],
-            cwd=source_path, capture_output=True, text=True, timeout=10, check=True,
+            cwd=source_path,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=True,
         )
         sha = result.stdout.strip()
         if sha:
             logger.info(
-                "head_sha not provided — resolved from git HEAD at %s: %s",
-                source_path, sha[:7],
+                "head_sha not provided — resolved from git HEAD: %s",
+                sha[:7],
             )
         return sha
     except Exception as exc:
-        logger.debug("Could not resolve HEAD SHA from %s: %s", source_path, exc)
+        logger.debug(
+            "Could not resolve HEAD SHA from %s: %s",
+            source_path,
+            exc,
+        )
         return ""
-
-
-# ===========================================================================
-# Self-clone (--clone)
-# ===========================================================================
-
-def clone_repository(
-    repo_slug: str,
-    branch: str,
-    clone_dir: str,
-    scm_token: str,
-    timeout: int = 300,
-    max_retries: int = 2,
-) -> None:
-    """Clone *repo_slug* (``owner/repo``) at *branch* into *clone_dir*.
-
-    Opt-in via ``--clone`` — this script normally assumes ``--source-path`` is
-    already a checkout (its original GHA-runner design: ``actions/checkout``
-    runs first). ``--clone`` lets it fetch the code itself instead, using an
-    ``x-access-token``-authenticated HTTPS URL, same auth pattern already
-    proven in ``veracode_repo_scan.py``'s ``clone_repository``.
-    """
-    auth_url = f"https://x-access-token:{scm_token}@github.com/{repo_slug}.git"
-    logger.info("Cloning %s (branch=%s) ...", repo_slug, branch)
-    cmd = ["git", "clone", "--depth", "1", "--single-branch", "--no-tags", "--branch", branch, auth_url, clone_dir]
-    last_exc: Exception = RuntimeError("Clone did not run")
-    for attempt in range(1, max_retries + 1):
-        if attempt > 1:
-            logger.warning("Retrying clone (attempt %d/%d) ...", attempt, max_retries)
-            shutil.rmtree(clone_dir, ignore_errors=True)
-        try:
-            subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=True)
-            logger.info("Clone successful: %s", clone_dir)
-            return
-        except subprocess.TimeoutExpired as exc:
-            logger.error("Clone timed out after %ds (attempt %d/%d)", timeout, attempt, max_retries)
-            last_exc = exc
-        except subprocess.CalledProcessError as exc:
-            stderr = (exc.stderr or "").replace(scm_token, "***")
-            logger.error("Clone failed for %s: %s", repo_slug, stderr[:300])
-            raise
-    raise last_exc
 
 
 # ===========================================================================
@@ -498,124 +403,13 @@ def _upload_to_s3(presigned_url: str, archive_path: str) -> None:
 
 
 def _parse_tool_result(result: Any) -> dict:
-    """Parse Lineaje MCP tool output using the known-working response path.
-
-    The working scanner reads ``result.content[0].text`` and JSON-decodes it.
-    Keep that as the source of truth. We only add conservative unwrapping and
-    fail-closed diagnostics so malformed/error responses cannot turn into a
-    false zero-violation result.
-    """
-    if not hasattr(result, "content") or not result.content:
-        return {
-            "_parse_error": "MCP tool returned empty content",
-            "raw": "",
-        }
-
-    raw = (
-        result.content[0].text
-        if hasattr(result.content[0], "text")
-        else str(result.content[0])
-    )
-    raw_text = str(raw).strip()
-
-    # Match the working implementation first.
-    try:
-        parsed: Any = json.loads(raw_text)
-    except (json.JSONDecodeError, TypeError):
-        # A Markdown error report is a real scan failure, not "0 violations".
-        lowered = raw_text.lower()
-        if (
-            "## error" in lowered
-            or "**error**" in lowered
-            or "analysis failed:" in lowered
-        ):
-            return {
-                "_parse_error": "MCP analysis returned an error report",
-                "raw": raw_text,
-            }
-
-        return {
-            "_parse_error": "MCP tool response was not JSON",
-            "raw": raw_text,
-        }
-
-    # Some tool layers JSON-encode the payload more than once.
-    for _ in range(6):
-        if isinstance(parsed, str):
-            candidate = parsed.strip()
-            try:
-                parsed = json.loads(candidate)
-                continue
-            except (json.JSONDecodeError, TypeError):
-                lowered = candidate.lower()
-                if (
-                    "## error" in lowered
-                    or "**error**" in lowered
-                    or "analysis failed:" in lowered
-                ):
-                    return {
-                        "_parse_error": "MCP analysis returned an error report",
-                        "raw": candidate,
-                    }
-                return {
-                    "_parse_error": "MCP JSON payload decoded to plain text",
-                    "raw": candidate,
-                }
-        break
-
-    # A few wrappers return {"result": <actual JSON object/string>}.
-    # Unwrap only when result is the sole payload key; otherwise preserve the
-    # server's response exactly.
-    for _ in range(4):
-        if not (isinstance(parsed, dict) and set(parsed.keys()) == {"result"}):
-            break
-
-        nested = parsed["result"]
-        if isinstance(nested, dict):
-            parsed = nested
-            continue
-
-        if isinstance(nested, str):
-            candidate = nested.strip()
-            try:
-                decoded = json.loads(candidate)
-            except (json.JSONDecodeError, TypeError):
-                lowered = candidate.lower()
-                if (
-                    "## error" in lowered
-                    or "**error**" in lowered
-                    or "analysis failed:" in lowered
-                ):
-                    return {
-                        "_parse_error": "MCP analysis returned an error report",
-                        "raw": candidate,
-                    }
-                return {
-                    "_parse_error": "MCP result envelope contained plain text",
-                    "raw": candidate,
-                }
-
-            parsed = decoded
-            continue
-
-        return {
-            "_parse_error": (
-                "MCP result envelope contained unsupported type "
-                f"{type(nested).__name__}"
-            ),
-            "raw": str(nested),
-        }
-
-    if not isinstance(parsed, dict):
-        return {
-            "_parse_error": (
-                "MCP JSON response was not an object "
-                f"({type(parsed).__name__})"
-            ),
-            "raw": raw_text,
-        }
-
-    return parsed
+    if hasattr(result, "content") and result.content:
+        raw = result.content[0].text if hasattr(result.content[0], "text") else str(result.content[0])
+        try:
+            return json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            return {"raw": raw}
+    return {"raw": "empty response"}
 
 
 def _run_mcp_scan_via_client(
@@ -625,24 +419,9 @@ def _run_mcp_scan_via_client(
     branch: str,
     files_to_scan: List[str],
     archive_path: str,
-    head_sha: str = "",
 ) -> Dict[str, Any]:
-    """Run the Lineaje MCP flow using the known-working MCP v1 protocol.
-
-    ``head_sha`` is intentionally NOT sent as a custom MCP HTTP header.
-    It is already embedded in ``user_metadata.json`` inside the uploaded
-    archive and is used later for remediation-branch creation.
-
-    The GitHub Action should pin ``mcp==1.14.1``.
-    """
-    try:
-        from mcp.client.streamable_http import streamablehttp_client
-        from mcp import ClientSession
-    except ImportError as exc:
-        raise RuntimeError(
-            "This scanner's verified transport requires mcp==1.14.1. "
-            "Pin the GitHub Action dependency to: pip install \"mcp==1.14.1\""
-        ) from exc
+    from mcp.client.streamable_http import streamablehttp_client
+    from mcp import ClientSession
 
     async def _scan() -> Dict[str, Any]:
         upload_args: Dict[str, Any] = {
@@ -650,70 +429,26 @@ def _run_mcp_scan_via_client(
             "branch_or_tag": branch,
             "files_to_scan": files_to_scan,
         }
-
-        logger.info("Using verified MCP Python SDK v1 streamable HTTP client")
-
-        # ------------------------------------------------------------------
-        # Step 1: get upload URL
-        # Match known-working behavior exactly: Authorization header only.
-        # ------------------------------------------------------------------
         tok1 = bearer_getter()
         async with streamablehttp_client(
-            server_url,
-            headers={"Authorization": f"Bearer {tok1}"},
+            server_url, headers={"Authorization": f"Bearer {tok1}"},
         ) as (read, write, _):
             async with ClientSession(read, write) as session:
                 await session.initialize()
                 logger.info("MCP step 1/3: get_upload_url")
-
                 upload_result = _parse_tool_result(
-                    await session.call_tool(
-                        "get_upload_url",
-                        arguments=upload_args,
-                    )
+                    await session.call_tool("get_upload_url", arguments=upload_args)
                 )
-
-                if "_parse_error" in upload_result:
-                    raise RuntimeError(
-                        f"get_upload_url response parse failed: "
-                        f"{upload_result['_parse_error']}; "
-                        f"raw={upload_result.get('raw', '')[:3000]}"
-                    )
-
                 if not upload_result.get("success"):
-                    raise RuntimeError(
-                        f"get_upload_url failed: "
-                        f"{upload_result.get('error', upload_result)}"
-                    )
+                    raise RuntimeError(f"get_upload_url failed: {upload_result.get('error', upload_result)}")
+                archive_id = upload_result["archive_id"]
+                presigned_url = upload_result["presigned_url"]
 
-                archive_id = upload_result.get("archive_id")
-                presigned_url = upload_result.get("presigned_url")
-
-                if not archive_id or not presigned_url:
-                    raise RuntimeError(
-                        "get_upload_url response missing archive_id or presigned_url"
-                    )
-
-        # ------------------------------------------------------------------
-        # Step 2: upload the ZIP produced by create_batch_archive().
-        # This is intentionally unchanged from the known-working scanner.
-        # ------------------------------------------------------------------
         logger.info("MCP step 2/3: upload to S3")
         _upload_to_s3(presigned_url, archive_path)
 
-        # ------------------------------------------------------------------
-        # Step 3: analyze uploaded archive
-        # Again: Authorization header only, matching the working scanner.
-        # ------------------------------------------------------------------
         tok2 = bearer_getter()
-        try:
-            sse_timeout = int(
-                os.environ.get("UNIFAI_MCP_SSE_READ_TIMEOUT", "1800")
-            )
-        except ValueError:
-            sse_timeout = 1800
-        sse_timeout = max(1, sse_timeout)
-
+        sse_timeout = int(os.environ.get("UNIFAI_MCP_SSE_READ_TIMEOUT", "1800"))
         async with streamablehttp_client(
             server_url,
             headers={"Authorization": f"Bearer {tok2}"},
@@ -721,48 +456,12 @@ def _run_mcp_scan_via_client(
         ) as (read2, write2, _):
             async with ClientSession(read2, write2) as session2:
                 await session2.initialize()
-                logger.info(
-                    "MCP step 3/3: analyze_uploaded_archive (timeout=%ds)",
-                    sse_timeout,
-                )
-
+                logger.info("MCP step 3/3: analyze_uploaded_archive (timeout=%ds)", sse_timeout)
                 analyze_args = dict(upload_args)
                 analyze_args["archive_id"] = archive_id
-
                 result = _parse_tool_result(
-                    await session2.call_tool(
-                        "analyze_uploaded_archive",
-                        arguments=analyze_args,
-                    )
+                    await session2.call_tool("analyze_uploaded_archive", arguments=analyze_args)
                 )
-
-                if "_parse_error" in result:
-                    raise RuntimeError(
-                        f"analyze_uploaded_archive response parse failed: "
-                        f"{result['_parse_error']}; "
-                        f"raw={result.get('raw', '')[:4000]}"
-                    )
-
-                # Fail closed on an explicitly unsuccessful/error response.
-                if result.get("success") is False:
-                    raise RuntimeError(
-                        f"analyze_uploaded_archive failed: "
-                        f"{result.get('error') or result.get('message') or result}"
-                    )
-
-                if str(result.get("status", "")).strip().lower() in {
-                    "error",
-                    "failed",
-                    "failure",
-                    "scan_error",
-                    "scan_failed",
-                }:
-                    raise RuntimeError(
-                        f"analyze_uploaded_archive returned status="
-                        f"{result.get('status')}: "
-                        f"{result.get('error') or result.get('message') or result}"
-                    )
-
                 return result
 
     return asyncio.run(_scan())
@@ -775,24 +474,9 @@ def run_mcp_scan(
     branch: str,
     files_to_scan: List[str],
     archive_path: str,
-    head_sha: str = "",
 ) -> Dict[str, Any]:
-    logger.info(
-        "MCP scan: %d files, repo=%s, branch=%s",
-        len(files_to_scan),
-        source_code_repo,
-        branch,
-    )
-    return _run_mcp_scan_via_client(
-        server_url,
-        bearer_getter,
-        source_code_repo,
-        branch,
-        files_to_scan,
-        archive_path,
-        head_sha=head_sha,
-    )
-
+    logger.info("MCP scan: %d files, repo=%s, branch=%s", len(files_to_scan), source_code_repo, branch)
+    return _run_mcp_scan_via_client(server_url, bearer_getter, source_code_repo, branch, files_to_scan, archive_path)
 
 # ===========================================================================
 # Parallel batch scan
@@ -826,50 +510,23 @@ def parallel_batch_scan(
             source_code_repo, branch, head_sha, batch_idx, run_id=run_id,
             manifest_files=manifest_files,
         )
-        result = run_mcp_scan(
-            server_url, bearer_getter, source_code_repo, branch, batch_files, archive_path, head_sha=head_sha,
-        )
+        result = run_mcp_scan(server_url, bearer_getter, source_code_repo, branch, batch_files, archive_path)
         return batch_idx, result
 
     def _collect(batch_idx: int, mcp_result: Dict[str, Any]) -> None:
-        if "_parse_error" in mcp_result:
-            raise RuntimeError(
-                f"Batch {batch_idx} MCP response parse failed: "
-                f"{mcp_result['_parse_error']}"
-            )
-
-        # Preserve the known Lineaje response contract.
         batch_actions = mcp_result.get("remediation_actions", [])
         batch_report = mcp_result.get("report", "")
         batch_aibom = mcp_result.get("aibom", [])
-
-        if not isinstance(batch_actions, list):
-            raise RuntimeError(
-                f"Batch {batch_idx} returned invalid remediation_actions type: "
-                f"{type(batch_actions).__name__}"
-            )
-        if not isinstance(batch_aibom, list):
-            raise RuntimeError(
-                f"Batch {batch_idx} returned invalid aibom type: "
-                f"{type(batch_aibom).__name__}"
-            )
-
         logger.info(
             "Batch %d/%d done: status=%s violations=%d aibom=%d",
-            batch_idx,
-            len(batches),
-            mcp_result.get("status", "unknown"),
-            len(batch_actions),
-            len(batch_aibom),
+            batch_idx, len(batches), mcp_result.get("status", "unknown"),
+            len(batch_actions), len(batch_aibom),
         )
-
         with lock:
             all_remediation_actions.extend(batch_actions)
             if batch_report:
                 all_reports.append(batch_report)
             for entry in batch_aibom:
-                if not isinstance(entry, dict):
-                    continue
                 key = (entry.get("name", ""), entry.get("source_file", ""))
                 if key not in aibom_seen:
                     aibom_seen.add(key)
@@ -885,13 +542,19 @@ def parallel_batch_scan(
                 _collect(batch_idx, mcp_result)
             except BaseException as exc:
                 failed_batch_count += 1
-                # Unwrap ExceptionGroup / TaskGroup to surface the real cause
+
+                # Async MCP failures can arrive wrapped in ExceptionGroup /
+                # TaskGroup errors. Surface the innermost useful cause.
                 cause = exc
-                if hasattr(exc, "exceptions") and exc.exceptions:
-                    cause = exc.exceptions[0]
+                if hasattr(cause, "exceptions") and cause.exceptions:
+                    cause = cause.exceptions[0]
                     if hasattr(cause, "exceptions") and cause.exceptions:
                         cause = cause.exceptions[0]
-                detail = f"Batch {batch_idx}/{len(batches)} failed: {type(cause).__name__}: {cause}"
+
+                detail = (
+                    f"Batch {batch_idx}/{len(batches)} failed: "
+                    f"{type(cause).__name__}: {cause}"
+                )
                 logger.error("%s", detail)
                 logger.debug("Full exception:", exc_info=exc)
                 failure_details.append(detail)
@@ -1027,7 +690,7 @@ def _apply_fix_entry(content: str, original: str, replacement: str) -> Tuple[str
             norm_walked += len(_normalize_for_patch_match(ch))
         else:
             real_idx = len(content)
-        sub = content[real_idx: real_idx + orig_len + 50]
+        sub = content[real_idx : real_idx + orig_len + 50]
         if orig_stripped in sub:
             actual_idx = content.find(orig_stripped, real_idx)
             if actual_idx != -1:
@@ -1176,12 +839,9 @@ def _create_fix_pr(
         return None, ""
 
     if not head_sha:
-        # Without a real SHA, both the short->full SHA lookup and the branch-creation POST to
-        # /git/refs are guaranteed to 422 (GitHub logs an empty-SHA commit lookup, then rejects
-        # a ref pointing at "" for needing 40 chars). Fail here with the real cause instead.
         logger.error(
             "Cannot create remediation branch: head_sha is empty. "
-            "Pass --head-sha or ensure $GITHUB_SHA is set in the environment."
+            "Pass --head-sha or ensure GITHUB_SHA is available."
         )
         return None, ""
 
@@ -1232,16 +892,16 @@ def _create_fix_pr(
     files_list = "\n".join(f"- `{f}`" for f in committed)
     failed_list = ("\n".join(f"- `{f}`" for f in (failed_files or []))) or "_None_"
     pr_body_lines = [
-        "## UniFAI AI Policy Remediation",
-        "",
+        f"## UniFAI AI Policy Remediation",
+        f"",
         f"Automated fixes for policy violations detected in `{branch}` at `{sha_short}`.",
-        "",
+        f"",
         f"### Files remediated ({len(committed)})",
-        "",
+        f"",
         files_list,
-        "",
+        f"",
         f"### Files without fixes ({len(failed_files or [])})",
-        "",
+        f"",
         failed_list,
     ]
     if report:
@@ -1267,27 +927,22 @@ def _create_fix_pr(
 
 def _execute_scan(args: argparse.Namespace) -> int:
     logger.info("Scanner build: %s", SCANNER_BUILD)
+
     repo = args.repo or os.environ.get("GITHUB_REPOSITORY", "")
     branch = args.branch or os.environ.get("GITHUB_REF_NAME", "")
     head_sha = args.head_sha or os.environ.get("GITHUB_SHA", "")
     source_path = os.path.abspath(args.source_path)
     server_url = args.mcp_server_url or os.environ.get("MCP_SERVER_URL", "") or MCP_SERVER_URL
     source_code_repo = f"https://github.com/{repo}.git" if repo else source_path
+
     logger.info("Effective MCP server URL: %s", server_url)
-    do_clone = getattr(args, "clone", False)
-    github_token = (
-        getattr(args, "github_token", None)
-        or os.environ.get("GH_TOKEN", "")
-        or os.environ.get("GITHUB_TOKEN", "")
-    )
+
+    # If the workflow did not supply a commit SHA, use the checked-out repo.
+    if not head_sha:
+        head_sha = _resolve_head_sha_from_source(source_path)
 
     # Validate config
-    required = [("GITHUB_REPOSITORY / --repo", repo), ("GITHUB_REF_NAME / --branch", branch)]
-    if do_clone:
-        # Cloning needs a token unconditionally — there's nothing to scan without it,
-        # regardless of whether --create-fix-pr is also set.
-        required.append(("GH_TOKEN / GITHUB_TOKEN / --github-token (required with --clone)", github_token))
-    missing = [n for n, v in required if not v]
+    missing = [n for n, v in [("GITHUB_REPOSITORY / --repo", repo), ("GITHUB_REF_NAME / --branch", branch)] if not v]
     if missing:
         output = build_json_output(
             status="error", repo=repo, branch=branch, head_sha=head_sha,
@@ -1297,50 +952,32 @@ def _execute_scan(args: argparse.Namespace) -> int:
         print_human_output(output)
         return 2
 
-    if do_clone:
-        # --clone: fetch repo/branch ourselves instead of assuming --source-path is
-        # already a checkout — lets this script run outside a real GHA job (e.g. from
-        # a plain VM) without a separate manual clone step.
-        clone_dir = tempfile.mkdtemp(prefix="gha-repo-scan-clone-")
-        try:
-            clone_repository(repo, branch, clone_dir, github_token)
-        except Exception as exc:
-            shutil.rmtree(clone_dir, ignore_errors=True)
-            output = build_json_output(
-                status="error", repo=repo, branch=branch, head_sha=head_sha,
-                source_code_repo=source_code_repo, files_scanned=0, batches=0, failed_batches=0,
-                violations=[], scan_errors=[f"Clone failed: {exc}"],
-            )
-            print_human_output(output)
-            return 1
-        atexit.register(shutil.rmtree, clone_dir, ignore_errors=True)
-        source_path = clone_dir
-        logger.info("Cloned %s@%s into %s — scanning this checkout", repo, branch, clone_dir)
-
-    if not head_sha:
-        # Neither --head-sha nor $GITHUB_SHA (the latter is only set inside a real GHA
-        # job) — fall back to reading it straight off the checkout being scanned
-        # (the fresh clone above, when --clone was used).
-        head_sha = _resolve_head_sha_from_source(source_path)
-
     if getattr(args, "create_fix_pr", False) and not head_sha:
-        # head_sha is only load-bearing when we're about to create a remediation branch off it —
-        # an empty value there produces a confusing cascade of GitHub API 422s, not a clear error.
         output = build_json_output(
-            status="error", repo=repo, branch=branch, head_sha=head_sha,
-            source_code_repo=source_code_repo, files_scanned=0, batches=0, failed_batches=0,
+            status="error",
+            repo=repo,
+            branch=branch,
+            head_sha=head_sha,
+            source_code_repo=source_code_repo,
+            files_scanned=0,
+            batches=0,
+            failed_batches=0,
             violations=[],
-            scan_errors=["Missing required config: GITHUB_SHA / --head-sha (required with --create-fix-pr)"],
+            scan_errors=[
+                "Missing GITHUB_SHA / --head-sha required for --create-fix-pr"
+            ],
         )
         print_human_output(output)
         return 2
 
     try:
         bearer_getter = build_bearer_getter()
-        # Eagerly exchange LINEAJE_PAT_TOKEN for an access token now, so a bad/expired
-        # refresh token fails fast here instead of after a full scan.
+        # Eagerly fetch a token at startup to catch auth errors early.
         access_token = bearer_getter()
-        logger.info("Auth OK — renew-access-token exchange succeeded (token len=%d)", len(access_token))
+        logger.info(
+            "Auth OK — renew-access-token exchange succeeded (token len=%d)",
+            len(access_token),
+        )
     except Exception as exc:
         output = build_json_output(
             status="error", repo=repo, branch=branch, head_sha=head_sha,
@@ -1373,7 +1010,7 @@ def _execute_scan(args: argparse.Namespace) -> int:
     batch_size = _batch_size(len(scan_files))
     batches = [scan_files[i: i + batch_size] for i in range(0, len(scan_files), batch_size)]
     logger.info(
-        "Files: %d total (%d code, %d manifest) -> %d batch(es) of <=%d",
+        "Files: %d total (%d code, %d manifest) → %d batch(es) of ≤%d",
         len(file_list), len(code_files), len(manifest_files), len(batches), batch_size,
     )
 
@@ -1394,7 +1031,7 @@ def _execute_scan(args: argparse.Namespace) -> int:
 
     elapsed = time.perf_counter() - scan_start
     logger.info(
-        "Scan complete in %.1fs: %d violation(s), %d AIBOM entry/ies, %d failed batch(es)",
+        "Scan complete in %.1fs: %d violation(s), %d AIBOM entr(ies), %d failed batch(es)",
         elapsed, len(all_violations), len(all_aibom), failed_batches_count,
     )
 
@@ -1420,7 +1057,11 @@ def _execute_scan(args: argparse.Namespace) -> int:
     remediation_branch = ""
     failed_rem_files: List[str] = []
 
-    # github_token already resolved near the top of this function (also used for --clone).
+    github_token = (
+        getattr(args, "github_token", None)
+        or os.environ.get("GH_TOKEN", "")
+        or os.environ.get("GITHUB_TOKEN", "")
+    )
     if all_violations and github_token and getattr(args, "create_fix_pr", False):
         logger.info(
             "STEP 3: Applying fix_code patches for %d violation(s)", len(all_violations)
@@ -1471,16 +1112,7 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--source-path", default=".",
-        help="Path to the checked-out source code (default: current directory). "
-             "Ignored when --clone is set — the fresh clone is scanned instead.",
-    )
-    parser.add_argument(
-        "--clone", action="store_true",
-        help="Clone --repo/--branch into a temp dir using --github-token before scanning, "
-             "instead of assuming --source-path is already a checkout (default: false). "
-             "Lets this script run outside a real GHA job (e.g. a plain VM) without a "
-             "separate manual clone step. Requires --github-token (or $GH_TOKEN / "
-             "$GITHUB_TOKEN) regardless of --create-fix-pr.",
+        help="Path to the checked-out source code (default: current directory)",
     )
     parser.add_argument(
         "--repo", default="",
