@@ -69,7 +69,7 @@ logger = logging.getLogger("gha_repo_scan")
 # ===========================================================================
 
 MCP_SERVER_URL = "https://mcp.v2.prod.veedna.com/mcp"
-SCANNER_BUILD = "2026-08-23-prod-working-transport-new-parser-v1"
+SCANNER_BUILD = "2026-08-23-prod-policy-details-pr-no-loop-v3"
 
 MAX_SCAN_WORKERS = 4
 REMEDIATION_BRANCH_PREFIX = "remediation/unifai-gha"
@@ -860,10 +860,64 @@ def build_json_output(
     }
 
 
+def _extract_all_markdown_sections(
+    report: str,
+    start_pattern: str,
+    stop_pattern: str,
+) -> List[str]:
+    """Return every matching markdown section, preserving MCP markdown verbatim."""
+    if not report:
+        return []
+
+    pattern = re.compile(
+        rf"(?ms)^{start_pattern}[ \t]*\n.*?(?=^{stop_pattern}|\Z)"
+    )
+    return [match.group(0).strip() for match in pattern.finditer(report)]
+
+
+def _policy_report_details(report: str) -> str:
+    """Extract the policy/result details we want visible in CI and PR comments.
+
+    We deliberately use the MCP-generated report rather than rebuilding
+    tables from remediation_actions. This preserves policy names, control
+    actions, component names, timing, and markdown exactly as returned.
+    """
+    if not report:
+        return ""
+
+    section_2 = _extract_all_markdown_sections(
+        report,
+        r"### SECTION 2: Policy Violations",
+        r"### SECTION 3: Controls Enforced",
+    )
+
+    section_3 = _extract_all_markdown_sections(
+        report,
+        r"### SECTION 3: Controls Enforced",
+        r"### AI Component Relationship Graph|### Phase Timing|---[ \t]*$|# LINEAJE AI POLICY REPORT",
+    )
+
+    phase_timing = _extract_all_markdown_sections(
+        report,
+        r"### Phase Timing",
+        r"---[ \t]*$|### Remediation applied|# LINEAJE AI POLICY REPORT",
+    )
+
+    # Preserve order per category. For the normal one-batch case this is:
+    # Section 2 -> Section 3 -> Phase Timing.
+    selected: List[str] = []
+    selected.extend(section_2)
+    selected.extend(section_3)
+    selected.extend(phase_timing)
+
+    return "\n\n".join(part for part in selected if part.strip())
+
+
 def print_human_output(output: Dict[str, Any]) -> None:
     status = output.get("status", "unknown")
     violations = output.get("violations", [])
     scan_errors = output.get("scan_errors", [])
+    report = output.get("report", "") or ""
     metadata = output.get("scan_metadata", {})
     scanned_at = metadata.get("scanned_at", "")
     branch = metadata.get("branch", "")
@@ -889,27 +943,50 @@ def print_human_output(output: Dict[str, Any]) -> None:
             print(f"- {err}")
         print()
 
-    if not violations:
-        if status == "compliant":
-            print("\nNo violations found.")
-        return
+    if violations:
+        from collections import defaultdict
 
-    from collections import defaultdict
-    by_file: Dict[str, List[str]] = defaultdict(list)
-    for v in violations:
-        file_ = v.get("file", "(unknown)")
-        control = v.get("control", "(unknown)")
-        by_file[file_].append(control)
+        by_file: Dict[str, List[str]] = defaultdict(list)
+        for v in violations:
+            file_ = v.get("file", "(unknown)")
+            control = v.get("control", "(unknown)")
+            by_file[file_].append(control)
 
-    num_files = len(by_file)
-    print(f"\n**{len(violations)} violation(s) across {num_files} file(s)**\n")
+        num_files = len(by_file)
+        print(
+            f"\n**{len(violations)} violation(s) across "
+            f"{num_files} file(s)**\n"
+        )
 
-    print("| File | Policy Violations |")
-    print("|------|-------------------|")
+        print("| File | Policy Violations |")
+        print("|------|-------------------|")
 
-    for file_, controls in sorted(by_file.items()):
-        numbered = "".join(f"{i}. {c}<br>" for i, c in enumerate(controls, 1))
-        print(f"| `{file_}` | {numbered} |")
+        for file_, controls in sorted(by_file.items()):
+            numbered = "".join(
+                f"{i}. {c}<br>"
+                for i, c in enumerate(controls, 1)
+            )
+            print(f"| `{file_}` | {numbered} |")
+
+    elif status == "compliant":
+        print("\nNo violations found.")
+
+    # ------------------------------------------------------------------
+    # Detailed policy output for GitHub Actions + PR comments.
+    #
+    # The workflow already tees stdout into scan_result.txt, then:
+    #   * cats scan_result.txt into $GITHUB_STEP_SUMMARY
+    #   * uses scan_result.txt as the PR comment body
+    #
+    # Therefore printing these exact MCP report sections here updates both
+    # surfaces without requiring any YAML changes.
+    # ------------------------------------------------------------------
+    details = _policy_report_details(report)
+    if details:
+        print("\n---\n")
+        print("## Policy Evaluation Details")
+        print()
+        print(details)
 
 
 # ===========================================================================
@@ -1123,7 +1200,12 @@ def _create_fix_pr(
         except Exception:
             pass
         policies = ", ".join({r["policy"] for r in fix_table if r["file"] == filepath}) or "policy violations"
-        message = f"fix({filepath}): remediate {policies} [unifai-gha-scan]"
+        # Prevent the remediation PR from recursively starting push/PR
+        # workflows. GitHub recognizes [skip ci] on the HEAD commit.
+        message = (
+            f"fix({filepath}): remediate {policies} "
+            f"[unifai-gha-scan] [skip ci]"
+        )
         try:
             scm.commit_file(repo, remediation_branch, filepath, content.encode("utf-8"), message, sha=blob_sha)
             committed.append(filepath)
@@ -1152,12 +1234,47 @@ def _create_fix_pr(
         f"",
         failed_list,
     ]
+
     if report:
-        MAX_REPORT_CHARS = 56_000  # leave room for rest of PR body; GitHub cap is 65536
+        # Put the useful policy details directly in the PR body so reviewers
+        # do not have to expand the full report to understand what was found
+        # and which controls were enforced.
+        policy_details = _policy_report_details(report)
+
+        if policy_details:
+            pr_body_lines += [
+                "",
+                "---",
+                "",
+                "## Policy Evaluation Details",
+                "",
+                policy_details,
+            ]
+
+        # Keep the complete server report available as a collapsed appendix.
+        # Leave enough room for the visible policy details and other PR text.
+        MAX_REPORT_CHARS = 42_000
         report_text = report.strip()
+
         if len(report_text) > MAX_REPORT_CHARS:
-            report_text = report_text[:MAX_REPORT_CHARS] + "\n\n---\n\n*…Report truncated for GitHub PR body size limit. Retrieve the full text from CI logs.*"
-        pr_body_lines += ["", "---", "", "<details><summary>Full scan report</summary>", "", report_text, "", "</details>"]
+            report_text = (
+                report_text[:MAX_REPORT_CHARS]
+                + "\n\n---\n\n"
+                + "*…Report truncated for GitHub PR body size limit. "
+                  "Retrieve the full text from CI logs.*"
+            )
+
+        pr_body_lines += [
+            "",
+            "---",
+            "",
+            "<details><summary>Full scan report</summary>",
+            "",
+            report_text,
+            "",
+            "</details>",
+        ]
+
     pr_body = "\n".join(pr_body_lines)
 
     try:
