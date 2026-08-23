@@ -70,7 +70,7 @@ logger = logging.getLogger("gha_repo_scan")
 # ===========================================================================
 
 MCP_SERVER_URL = "https://mcp.v2.prod.veedna.com/mcp"
-SCANNER_BUILD = "2026-08-22-dev-scm-targz-v1"
+SCANNER_BUILD = "2026-08-23-prod-response-parser-v2"
 
 MAX_SCAN_WORKERS = 4
 REMEDIATION_BRANCH_PREFIX = "remediation/unifai-gha"
@@ -404,14 +404,153 @@ def _upload_to_s3(presigned_url: str, archive_path: str) -> None:
     logger.info("S3 upload complete")
 
 
-def _parse_tool_result(result: Any) -> dict:
-    if hasattr(result, "content") and result.content:
-        raw = result.content[0].text if hasattr(result.content[0], "text") else str(result.content[0])
+def _decode_json_layers(value: Any, max_depth: int = 8) -> Any:
+    """Decode nested JSON strings without changing already-structured values."""
+    current = value
+
+    for _ in range(max_depth):
+        if not isinstance(current, str):
+            break
+
+        s = current.strip()
+        if not s:
+            return s
+
+        # Strip a fenced JSON block if a tool happened to wrap it in markdown.
+        if s.startswith("```") and s.endswith("```"):
+            lines = s.splitlines()
+            if len(lines) >= 3:
+                lines = lines[1:-1]
+                s = "\n".join(lines).strip()
+
         try:
-            return json.loads(raw)
+            current = json.loads(s)
         except (json.JSONDecodeError, TypeError):
-            return {"raw": raw}
-    return {"raw": "empty response"}
+            return current
+
+    return current
+
+
+def _looks_like_lineaje_scan_payload(value: Any) -> bool:
+    if not isinstance(value, dict):
+        return False
+
+    scan_keys = {
+        "status",
+        "report",
+        "remediation_actions",
+        "violations",
+        "aibom",
+        "aibom_section",
+        "display_instruction",
+        "title",
+        "archive_id",
+        "presigned_url",
+        "success",
+        "error",
+    }
+    return bool(scan_keys.intersection(value.keys()))
+
+
+def _unwrap_lineaje_payload(value: Any, max_depth: int = 8) -> Any:
+    """Unwrap MCP/JSON envelopes until the Lineaje payload is reached."""
+    current = _decode_json_layers(value)
+
+    for _ in range(max_depth):
+        current = _decode_json_layers(current)
+
+        if _looks_like_lineaje_scan_payload(current):
+            return current
+
+        if not isinstance(current, dict):
+            return current
+
+        # Common MCP/server envelopes. Prefer `result`, since that is the
+        # shape we've already observed from this server.
+        moved = False
+        for key in (
+            "result",
+            "data",
+            "output",
+            "response",
+            "payload",
+            "scan_result",
+            "scanResult",
+        ):
+            if key in current:
+                current = current[key]
+                moved = True
+                break
+
+        if not moved:
+            return current
+
+    return current
+
+
+def _parse_tool_result(result: Any) -> dict:
+    """Parse an MCP CallToolResult across both text and structured responses.
+
+    The old scanner assumed the entire Lineaje response was always in
+    result.content[0].text. Prod can expose the useful payload through a
+    wrapper and/or structuredContent, so evaluate all available candidates
+    and select the one that actually contains Lineaje result fields.
+    """
+    if result is None:
+        return {
+            "_parse_error": "MCP tool returned no result",
+            "raw": "",
+        }
+
+    if bool(getattr(result, "isError", False) or getattr(result, "is_error", False)):
+        raw_parts = []
+        for block in (getattr(result, "content", None) or []):
+            if hasattr(block, "text"):
+                raw_parts.append(str(block.text))
+        return {
+            "_parse_error": "MCP tool returned isError=true",
+            "raw": "\n".join(raw_parts),
+        }
+
+    candidates: List[Tuple[str, Any]] = []
+
+    # Text blocks first. This preserves compatibility with the old response
+    # shape while no longer assuming block 0 must contain the final object.
+    for idx, block in enumerate(getattr(result, "content", None) or []):
+        if hasattr(block, "text"):
+            candidates.append((f"content[{idx}].text", block.text))
+
+    # MCP 1.14.1 CallToolResult also supports structuredContent.
+    structured = getattr(result, "structuredContent", None)
+    if structured is not None:
+        candidates.append(("structuredContent", structured))
+
+    structured_snake = getattr(result, "structured_content", None)
+    if structured_snake is not None and structured_snake is not structured:
+        candidates.append(("structured_content", structured_snake))
+
+    diagnostics: List[str] = []
+
+    for source_name, candidate in candidates:
+        parsed = _unwrap_lineaje_payload(candidate)
+
+        if _looks_like_lineaje_scan_payload(parsed):
+            logger.info(
+                "Parsed MCP response from %s; keys=%s",
+                source_name,
+                sorted(parsed.keys()),
+            )
+            return parsed
+
+        # Preserve a useful preview for errors without dumping huge fix_code.
+        preview = repr(parsed)
+        diagnostics.append(f"{source_name}={preview[:1200]}")
+
+    return {
+        "_parse_error": "MCP response contained no recognized Lineaje payload",
+        "raw": " | ".join(diagnostics)[:4000],
+    }
+
 
 
 def _run_mcp_scan_via_client(
@@ -464,14 +603,27 @@ def _run_mcp_scan_via_client(
                     )
                 )
 
-                if not upload_result.get("success"):
+                if "_parse_error" in upload_result:
+                    raise RuntimeError(
+                        "get_upload_url response parse failed: "
+                        f"{upload_result['_parse_error']}; "
+                        f"raw={upload_result.get('raw', '')}"
+                    )
+
+                if upload_result.get("success") is False:
                     raise RuntimeError(
                         f"get_upload_url failed: "
                         f"{upload_result.get('error', upload_result)}"
                     )
 
-                archive_id = upload_result["archive_id"]
-                presigned_url = upload_result["presigned_url"]
+                archive_id = upload_result.get("archive_id")
+                presigned_url = upload_result.get("presigned_url")
+
+                if not archive_id or not presigned_url:
+                    raise RuntimeError(
+                        "get_upload_url response missing archive_id/presigned_url; "
+                        f"keys={sorted(upload_result.keys())}"
+                    )
 
         logger.info("MCP step 2/3: upload to S3")
         _upload_to_s3(presigned_url, archive_path)
@@ -505,6 +657,54 @@ def _run_mcp_scan_via_client(
                         arguments=analyze_args,
                     )
                 )
+
+                if "_parse_error" in result:
+                    raise RuntimeError(
+                        "analyze_uploaded_archive response parse failed: "
+                        f"{result['_parse_error']}; "
+                        f"raw={result.get('raw', '')}"
+                    )
+
+                logger.info(
+                    "MCP analyze response keys: %s",
+                    sorted(result.keys()),
+                )
+
+                # An explicit error result must fail the batch.
+                if result.get("success") is False:
+                    raise RuntimeError(
+                        "analyze_uploaded_archive failed: "
+                        f"{result.get('error') or result.get('message') or result}"
+                    )
+
+                status_value = str(result.get("status", "")).strip().lower()
+                if status_value in {
+                    "error",
+                    "failed",
+                    "failure",
+                    "scan_error",
+                    "scan_failed",
+                }:
+                    raise RuntimeError(
+                        "analyze_uploaded_archive returned "
+                        f"status={result.get('status')}: "
+                        f"{result.get('error') or result.get('message') or result}"
+                    )
+
+                # A completed analysis should contain at least one of these.
+                # Do not ever turn an unrecognized response into "compliant".
+                expected_keys = {
+                    "status",
+                    "report",
+                    "remediation_actions",
+                    "violations",
+                    "aibom",
+                }
+                if not expected_keys.intersection(result.keys()):
+                    raise RuntimeError(
+                        "analyze_uploaded_archive returned an unexpected "
+                        f"response shape; keys={sorted(result.keys())}"
+                    )
 
                 return result
 
@@ -582,19 +782,50 @@ def parallel_batch_scan(
         return batch_idx, result
 
     def _collect(batch_idx: int, mcp_result: Dict[str, Any]) -> None:
-        batch_actions = mcp_result.get("remediation_actions", [])
+        batch_actions = mcp_result.get("remediation_actions")
+        if batch_actions is None:
+            batch_actions = mcp_result.get("violations", [])
+
         batch_report = mcp_result.get("report", "")
         batch_aibom = mcp_result.get("aibom", [])
+
+        if not isinstance(batch_actions, list):
+            raise RuntimeError(
+                "MCP remediation_actions/violations is not a list: "
+                f"{type(batch_actions).__name__}"
+            )
+
+        if not isinstance(batch_aibom, list):
+            raise RuntimeError(
+                "MCP aibom is not a list: "
+                f"{type(batch_aibom).__name__}"
+            )
+
+        server_status = mcp_result.get("status", "unknown")
+
+        # `unknown` is no longer acceptable as a successful scan result.
+        if server_status == "unknown":
+            raise RuntimeError(
+                "MCP analysis returned no status; refusing to mark scan compliant"
+            )
+
         logger.info(
             "Batch %d/%d done: status=%s violations=%d aibom=%d",
-            batch_idx, len(batches), mcp_result.get("status", "unknown"),
-            len(batch_actions), len(batch_aibom),
+            batch_idx,
+            len(batches),
+            server_status,
+            len(batch_actions),
+            len(batch_aibom),
         )
+
         with lock:
             all_remediation_actions.extend(batch_actions)
             if batch_report:
                 all_reports.append(batch_report)
+
             for entry in batch_aibom:
+                if not isinstance(entry, dict):
+                    continue
                 key = (entry.get("name", ""), entry.get("source_file", ""))
                 if key not in aibom_seen:
                     aibom_seen.add(key)
