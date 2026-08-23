@@ -44,7 +44,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import base64
-import io
 import fnmatch
 import json
 import logging
@@ -55,10 +54,10 @@ import sys
 import tempfile
 import threading
 import time
-import tarfile
 import urllib.error
 import urllib.parse
 import urllib.request
+import zipfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -70,7 +69,7 @@ logger = logging.getLogger("gha_repo_scan")
 # ===========================================================================
 
 MCP_SERVER_URL = "https://mcp.v2.prod.veedna.com/mcp"
-SCANNER_BUILD = "2026-08-23-prod-response-parser-v2"
+SCANNER_BUILD = "2026-08-23-prod-working-transport-new-parser-v1"
 
 MAX_SCAN_WORKERS = 4
 REMEDIATION_BRANCH_PREFIX = "remediation/unifai-gha"
@@ -310,32 +309,25 @@ def create_batch_archive(
     run_id: str = "",
     manifest_files: Optional[List[str]] = None,
 ) -> str:
-    """Create the SCM archive expected by the current DEV backend.
-
-    The original working scanner created ZIP files. The current DEV SCM
-    analyze path expects a gzip-compressed tar archive, while keeping the
-    exact same files and user_metadata.json payload.
-    """
     archive_path = os.path.join(
         archive_dir,
-        f"repo_scan_batch_{batch_index}.tar.gz",
+        f"repo_scan_batch_{batch_index}.zip",
     )
-
     extra_manifests = [
         m for m in (manifest_files or [])
         if m not in file_subset
     ]
     all_files = list(file_subset) + extra_manifests
 
-    with tarfile.open(archive_path, "w:gz") as tf:
+    with zipfile.ZipFile(
+        archive_path,
+        "w",
+        zipfile.ZIP_DEFLATED,
+    ) as zf:
         for rel_path in all_files:
             full_path = os.path.join(source_dir, rel_path)
             if os.path.isfile(full_path):
-                tf.add(
-                    full_path,
-                    arcname=rel_path,
-                    recursive=False,
-                )
+                zf.write(full_path, rel_path)
 
         metadata = {
             "scan_source": "gha_repo_scan",
@@ -347,24 +339,14 @@ def create_batch_archive(
             "batch_file_count": len(file_subset),
             "manifest_file_count": len(extra_manifests),
         }
-
-        metadata_bytes = json.dumps(
-            metadata,
-            indent=2,
-        ).encode("utf-8")
-
-        metadata_info = tarfile.TarInfo("user_metadata.json")
-        metadata_info.size = len(metadata_bytes)
-        metadata_info.mtime = int(time.time())
-
-        tf.addfile(
-            metadata_info,
-            io.BytesIO(metadata_bytes),
+        zf.writestr(
+            "user_metadata.json",
+            json.dumps(metadata, indent=2),
         )
 
     size_kb = os.path.getsize(archive_path) // 1024
     logger.info(
-        "Batch archive #%d: %d files + %d manifests, %d KB (tar.gz)",
+        "Batch archive #%d: %d files + %d manifests, %d KB (zip)",
         batch_index,
         len(file_subset),
         len(extra_manifests),
@@ -396,7 +378,7 @@ def _upload_to_s3(presigned_url: str, archive_path: str) -> None:
     with open(archive_path, "rb") as f:
         req = urllib.request.Request(
             presigned_url, data=f.read(), method="PUT",
-            headers={"Content-Type": "application/gzip"},
+            headers={"Content-Type": "application/zip"},
         )
         with urllib.request.urlopen(req) as resp:
             if resp.status not in (200, 204):
@@ -562,13 +544,10 @@ def _run_mcp_scan_via_client(
     archive_path: str,
     head_sha: str = "",
 ) -> Dict[str, Any]:
-    """Run the known-working MCP v1 flow with the current DEV SCM signal.
+    """Run the working Prod MCP v1 transport with robust response parsing.
 
-    The MCP request itself remains the old working implementation:
-    ``streamablehttp_client`` + ``ClientSession`` + text-content JSON parsing.
-
-    The only transport addition is ``X-Unifai-Commit-Sha``, which tells the
-    current DEV backend this is an SCM/CI scan instead of an IDE scan.
+    Transport intentionally matches the known-working scanner:
+    Authorization-only MCP headers and ZIP archive upload.
     """
     from mcp.client.streamable_http import streamablehttp_client
     from mcp import ClientSession
@@ -580,17 +559,10 @@ def _run_mcp_scan_via_client(
             "files_to_scan": files_to_scan,
         }
 
-        scm_headers: Dict[str, str] = {}
-        if head_sha:
-            scm_headers["X-Unifai-Commit-Sha"] = head_sha
-
         tok1 = bearer_getter()
         async with streamablehttp_client(
             server_url,
-            headers={
-                "Authorization": f"Bearer {tok1}",
-                **scm_headers,
-            },
+            headers={"Authorization": f"Bearer {tok1}"},
         ) as (read, write, _):
             async with ClientSession(read, write) as session:
                 await session.initialize()
@@ -635,10 +607,7 @@ def _run_mcp_scan_via_client(
 
         async with streamablehttp_client(
             server_url,
-            headers={
-                "Authorization": f"Bearer {tok2}",
-                **scm_headers,
-            },
+            headers={"Authorization": f"Bearer {tok2}"},
             sse_read_timeout=sse_timeout,
         ) as (read2, write2, _):
             async with ClientSession(read2, write2) as session2:
