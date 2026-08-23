@@ -45,7 +45,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Scanner lives in this repository.
       - name: Checkout scanner scripts
         uses: actions/checkout@v4
         with:
@@ -95,7 +94,6 @@ jobs:
             echo "create_fix_pr=$create_fix_pr"
           } >> "$GITHUB_OUTPUT"
 
-      # Checkout the repository/code to scan.
       - name: Checkout target code
         uses: actions/checkout@v4
         with:
@@ -104,7 +102,6 @@ jobs:
           path: target
           token: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
 
-      # For single-file mode, isolate only the requested file.
       - name: Prepare scan subject
         id: subject
         env:
@@ -139,7 +136,6 @@ jobs:
         with:
           python-version: "3.11"
 
-      # Pin the MCP version currently used by the scanner.
       - name: Install dependencies
         run: |
           set -euo pipefail
@@ -149,37 +145,27 @@ jobs:
 
           python -c "import importlib.metadata; print('MCP version:', importlib.metadata.version('mcp'))"
 
-      # Quick connectivity check.
-      # An HTTP error such as 401/405 is OK here — it proves the endpoint
-      # is reachable from the GitHub runner.
-      - name: Test DEV MCP connectivity
+      # Simple check that the GitHub runner can reach Prod.
+      # 405 is expected/acceptable for a plain GET.
+      - name: Test PROD MCP connectivity
         run: |
-          set -euo pipefail
-
-          echo "Testing DEV MCP endpoint..."
-
           curl -4 -sv \
             --connect-timeout 10 \
             --max-time 20 \
-            https://mcp.commercialdev.dev.veedna.com/mcp/ \
+            https://mcp.v2.prod.veedna.com/mcp \
             -o /dev/null || true
 
-      # Run the Lineaje AI policy scan.
-      #
-      # Policy violations themselves are report-only.
-      # Actual scanner errors still fail this step.
       - name: Run Lineaje AI policy scan
         env:
           LINEAJE_PAT_TOKEN: ${{ secrets.LINEAJE_PAT_TOKEN }}
-
           GH_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
 
-          # IMPORTANT:
-          # Keep the trailing slash.
-          MCP_SERVER_URL: https://mcp.commercialdev.dev.veedna.com/mcp/
+          # PROD
+          MCP_SERVER_URL: https://mcp.v2.prod.veedna.com/mcp
 
-          # DEV identity-service renew-access-token endpoint.
-          LINEAJE_RENEW_ACCESS_TOKEN_URL: ${{ vars.LINEAJE_RENEW_ACCESS_TOKEN_URL }}
+          # Do NOT use the commercialdev renew URL here.
+          # Leaving this unset makes the scanner use its built-in PROD
+          # renew-access-token endpoint.
 
           SOURCE_PATH: ${{ steps.subject.outputs.source_path }}
           TARGET_REPO: ${{ steps.resolve.outputs.target_repo }}
@@ -218,7 +204,6 @@ jobs:
             "${FLAGS[@]}" \
             | tee scan_result.txt
 
-      # Post the report on the PR.
       - name: Comment scan results on the PR
         if: always() && github.event_name == 'pull_request'
         continue-on-error: true
