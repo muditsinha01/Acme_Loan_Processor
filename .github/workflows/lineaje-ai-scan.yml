@@ -1,9 +1,5 @@
 name: Lineaje AI Scan
 
-# Three ways to run:
-#   1. Automatically on every PR.
-#   2. On demand against the whole repo.
-#   3. On demand against a single file.
 on:
   pull_request:
     types: [opened, synchronize, reopened]
@@ -42,6 +38,14 @@ permissions:
 
 jobs:
   lineaje-scan:
+    # Defense in depth:
+    # remediation PRs created by this scanner should never scan themselves.
+    if: >-
+      ${{
+        github.event_name != 'pull_request' ||
+        !startsWith(github.head_ref, 'remediation/unifai-gha')
+      }}
+
     runs-on: ubuntu-latest
 
     steps:
@@ -100,7 +104,7 @@ jobs:
           repository: ${{ steps.resolve.outputs.target_repo }}
           ref: ${{ steps.resolve.outputs.ref }}
           path: target
-          token: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GH_TOKEN || github.token }}
 
       - name: Prepare scan subject
         id: subject
@@ -139,14 +143,10 @@ jobs:
       - name: Install dependencies
         run: |
           set -euo pipefail
-
           python -m pip install --upgrade pip
           pip install "mcp==1.14.1"
-
           python -c "import importlib.metadata; print('MCP version:', importlib.metadata.version('mcp'))"
 
-      # Simple check that the GitHub runner can reach Prod.
-      # 405 is expected/acceptable for a plain GET.
       - name: Test PROD MCP connectivity
         run: |
           curl -4 -sv \
@@ -158,14 +158,13 @@ jobs:
       - name: Run Lineaje AI policy scan
         env:
           LINEAJE_PAT_TOKEN: ${{ secrets.LINEAJE_PAT_TOKEN }}
-          GH_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
 
-          # PROD
+          # Used by scm_client.py when --create-fix-pr is enabled.
+          # A custom GH_TOKEN can be used for cross-repository scans;
+          # otherwise github.token is sufficient for this repository.
+          GH_TOKEN: ${{ secrets.GH_TOKEN || github.token }}
+
           MCP_SERVER_URL: https://mcp.v2.prod.veedna.com/mcp
-
-          # Do NOT use the commercialdev renew URL here.
-          # Leaving this unset makes the scanner use its built-in PROD
-          # renew-access-token endpoint.
 
           SOURCE_PATH: ${{ steps.subject.outputs.source_path }}
           TARGET_REPO: ${{ steps.resolve.outputs.target_repo }}
@@ -208,7 +207,7 @@ jobs:
         if: always() && github.event_name == 'pull_request'
         continue-on-error: true
         env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN || github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
         run: |
