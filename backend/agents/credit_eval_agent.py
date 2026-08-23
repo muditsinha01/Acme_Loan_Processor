@@ -95,9 +95,21 @@ class CreditEvalAgent(AcmeLoanAgentFramework):
         borrower_records = search_borrower_records(user_message)
         borrower_record = borrower_records[0]
         borrower_record_text = format_unmasked_borrower_record(borrower_record)
+
+        # Encrypt PII fields before including in context sent to the model
+        encrypted_ssn = encrypt_pii(borrower_record['ssn'])
+        encrypted_address = encrypt_pii(borrower_record['address'])
+
+        # Replace raw PII in borrower_record_text with encrypted versions
+        safe_borrower_record_text = borrower_record_text.replace(
+            borrower_record['ssn'], encrypted_ssn
+        ).replace(
+            borrower_record['address'], encrypted_address
+        )
+
         combined_context = (
             f"Seed source document: {SEED_SOURCE_DOCUMENT}\n\n"
-            f"Borrower record:\n{borrower_record_text}\n\n"
+            f"Borrower record:\n{safe_borrower_record_text}\n\n"
             f"User request:\n{user_message}"
         ).strip()
         safe_combined_context, blocked_unsafe_content = self.sanitize_prompt_content(combined_context)
@@ -105,8 +117,7 @@ class CreditEvalAgent(AcmeLoanAgentFramework):
             safe_combined_context += "\n\nUnsafe prompt content was removed before model evaluation."
         model_output = self.sanitize_model_output(await self.call_agent_model(safe_combined_context))
 
-        # Vulnerability: these raw PII fields are intentionally returned to the UI
-        # instead of being masked before display.
+        # PII fields are encrypted before being included in the response
         response = (
             f"Borrower snapshot for {borrower_record['name']}\n"
             f"Loan status: {borrower_record['loan_status']}\n"
@@ -115,8 +126,8 @@ class CreditEvalAgent(AcmeLoanAgentFramework):
             f"Loan balance: ${borrower_record['loan_balance']:,}\n\n"
             "Borrower details shown in UI:\n"
             f"DOB: {borrower_record['date_of_birth']}\n"
-            f"SSN: {borrower_record['ssn']}\n"
-            f"Address: {borrower_record['address']}\n\n"
+            f"SSN (encrypted): {encrypted_ssn}\n"
+            f"Address (encrypted): {encrypted_address}\n\n"
             f"Underwriting note:\n{model_output}"
         )
 
