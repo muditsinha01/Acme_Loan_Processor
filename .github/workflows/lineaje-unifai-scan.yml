@@ -1,4 +1,4 @@
-name: Lineaje AI Policy Scan
+name: Lineaje AI Policy Scan - Sept 2026
 
 on:
   workflow_dispatch:
