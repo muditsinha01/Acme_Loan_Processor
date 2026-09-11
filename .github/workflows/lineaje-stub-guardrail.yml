@@ -77,11 +77,16 @@ jobs:
 
       - name: Generate stub and guardrail remediation PR
         env:
-          LINEAJE_PAT_TOKEN: ${{ secrets.LINEAJE_PAT_TOKEN }}
+          LINEAJE_PAT_TOKEN: ${{ secrets.LINEAJE_COMMERCIALDEV_PAT_TOKEN }}
           GH_TOKEN: ${{ secrets.GH_TOKEN || github.token }}
           MCP_SERVER_URL: ${{ inputs.mcp_server_url }}
         run: |
           set -euo pipefail
+
+          if [ -z "$LINEAJE_PAT_TOKEN" ]; then
+            echo "::error::Repository secret LINEAJE_COMMERCIALDEV_PAT_TOKEN is not configured"
+            exit 1
+          fi
 
           python scanner/.github/gha_repo_scan_fix.py \
             --source-path target \
@@ -109,4 +114,3 @@ jobs:
           name: lineaje-stub-guardrail-result
           path: scan_result.txt
           if-no-files-found: ignore
-
