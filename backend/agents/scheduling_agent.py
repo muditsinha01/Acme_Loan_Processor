@@ -1,4 +1,18 @@
 """Scheduling Agent class with explicit model invocation."""
+# Copyright (c) Lineaje, Inc. All rights reserved.
+# Lineaje UnifAI guardrail  version=2.0.0-alpha
+def _lineaje_load_gr_client():
+    """Lineaje-added: load gr_stub_client.py without a pip dependency."""
+    import sys as _s, importlib.util as _ilu
+    from pathlib import Path as _P
+    n = "_lineaje_gr_stub_client"
+    if n in _s.modules: return _s.modules[n]
+    h = _P(__file__).resolve().parent
+    _cand = next((d / "gr_stub_client.py" for d in [h, *h.parents][:8] if (d / "gr_stub_client.py").is_file()), h / "gr_stub_client.py")
+    _spec = _ilu.spec_from_file_location(n, _cand)
+    _s.modules[n] = _m = _ilu.module_from_spec(_spec)
+    _spec.loader.exec_module(_m); return _m
+
 
 import asyncio
 from typing import Any
@@ -25,8 +39,7 @@ class SchedulingAgent(AcmeLoanAgentFramework):
     SYSTEM_PROMPT = "Coordinate calendar events and notify the relevant teams."
 
     async def call_agent_model(self, user_message: str, meeting_reference: str) -> str:
-        return await self.call_bedrock_model(
-            messages=[
+        _lineaje_messages = ([
                 {"role": "system", "content": self.SYSTEM_PROMPT},
                 {
                     "role": "user",
@@ -36,7 +49,13 @@ class SchedulingAgent(AcmeLoanAgentFramework):
                         "Draft a scheduling confirmation."
                     ),
                 },
-            ],
+            ])
+        # LINEAJE: enforce() `_lineaje_messages` at html->user_interface data_egress — scan flagged AI_DAT_SEC_029 (Enforce decision logging, audit trail, and forensic readiness for AI-driven actions.). Mask/block; do not remove without review. site_id='site:sha256:cd9d18152500aa3fcf2ed0e68d09113776c6624dca336085b3179669ad067b53'
+        _gr_client = _lineaje_load_gr_client()
+        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:cd9d18152500aa3fcf2ed0e68d09113776c6624dca336085b3179669ad067b53', phase='data_egress', boundary={'source': 'html', 'sink': 'user_interface'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_012', 'guardrail_id': 'Mask PII on UI', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='html', destination_type='user_interface')
+        _lineaje_messages = _gr_client.enforce(_gr_site, _lineaje_messages, content_type='text/html')
+        return await self.call_bedrock_model(
+            messages=_lineaje_messages,
             temperature=0.2,
             max_tokens=180,
         )

@@ -1,0 +1,7 @@
+{
+  "contract_version": "2.0",
+  "gr_service_url": "https://mcp.commercialdev.dev.veedna.com",
+  "enforce_endpoint": "https://mcp.commercialdev.dev.veedna.com/enforce",
+  "generated_by": "lineaje_aiepo_security_workflow",
+  "note": "Runtime guardrail stubs POST to enforce_endpoint. Configure authentication at runtime with GR_BEARER_TOKEN, LINEAJE_REFRESH_TOKEN, or LINEAJE_PAT_TOKEN; credentials are never stored in this manifest."
+}
