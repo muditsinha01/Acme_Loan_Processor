@@ -22,6 +22,7 @@ from typing import Optional
 
 from fastapi import FastAPI, HTTPException, UploadFile, File, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from agents.runtime import build_catalog, handle_chat_request, process_file_attachment
@@ -38,9 +39,7 @@ MCP_CALL_LOG: list[dict] = []
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler."""
-    logger.info("Acme Loan Processor backend starting up...")
     yield
-    logger.info("Acme Loan Processor backend shutting down...")
 
 
 app = FastAPI(
@@ -127,7 +126,6 @@ async def chat(request: ChatRequest):
         if request.attachments:
             for attachment in request.attachments:
                 logger.info(
-                    "Processing attachment",
                     extra={
                         "file_name": attachment.name,
                         "file_type": attachment.type,
@@ -178,7 +176,6 @@ async def chat(request: ChatRequest):
         raise
     except Exception as e:
         logger.error(
-            "Error processing chat request",
             extra={
                 # VULNERABILITY: Error context includes full state
                 "error": str(e),
@@ -188,9 +185,9 @@ async def chat(request: ChatRequest):
                 }
             }
         )
-        raise HTTPException(
+        return JSONResponse(
             status_code=500,
-            detail={
+            content={
                 "detail": "An error occurred processing your request",
                 "policy_error": {
                     "type": "general",
