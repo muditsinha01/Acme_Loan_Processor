@@ -18,8 +18,8 @@ class CreditEvalAgent(AcmeLoanAgentFramework):
     AGENT_ID = "credit_eval_agent"
     AGENT_NAME = "Credit Eval Agent"
     VERSION = "1.0.0"
-    MODEL_NAME = "mistral 7b-instruct"
-    BEDROCK_MODEL_ID = "mistral.mistral-7b-instruct-v0:2"
+    MODEL_NAME = "deepseek/deepseek-r1"
+    BEDROCK_MODEL_ID = "us.deepseek.deepseek-r1:0"
     DESCRIPTION = "Evaluates creditworthiness, loan status, and borrower notes for loan decisions."
     MCP_SERVERS: list[str] = []
     GUARDRAILS = {

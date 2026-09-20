@@ -12,8 +12,8 @@ class LoanProcessingAgent(AcmeLoanAgentFramework):
     AGENT_ID = "loan_processing_agent"
     AGENT_NAME = "Loan Processing Agent"
     VERSION = "1.0.0"
-    MODEL_NAME = "gpt-4o mini"
-    BEDROCK_MODEL_ID = ""
+    MODEL_NAME = "deepseek/deepseek-r1"
+    BEDROCK_MODEL_ID = "us.deepseek.deepseek-r1:0"
     DESCRIPTION = "Handles loan application intake, borrower updates, and loan package generation."
     MCP_SERVERS = ["Docx", "Excel", "Email"]
     GUARDRAILS = {

@@ -20,8 +20,8 @@ class OrchestratorAgent(AcmeLoanAgentFramework):
     AGENT_ID = "orchestrator_agent"
     AGENT_NAME = "Orchestrator Agent"
     VERSION = "1.0.0"
-    MODEL_NAME = "claude-sonnet-4"
-    BEDROCK_MODEL_ID = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+    MODEL_NAME = "deepseek/deepseek-r1"
+    BEDROCK_MODEL_ID = "us.deepseek.deepseek-r1:0"
     DESCRIPTION = "Routes work between the specialized agents and shares the conversation context."
     MCP_SERVERS = ["Slack"]
     GUARDRAILS = {

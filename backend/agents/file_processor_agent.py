@@ -27,8 +27,8 @@ class FileProcessorAgent(AcmeLoanAgentFramework):
     AGENT_ID = "file_processor_agent"
     AGENT_NAME = "File Processor Agent"
     VERSION = "1.0.0"
-    MODEL_NAME = "mistral 7b-instruct"
-    BEDROCK_MODEL_ID = "mistral.mistral-7b-instruct-v0:2"
+    MODEL_NAME = "deepseek/deepseek-r1"
+    BEDROCK_MODEL_ID = "us.deepseek.deepseek-r1:0"
     DESCRIPTION = "Extracts text from uploaded files and returns the raw contents to downstream agents."
     MCP_SERVERS = ["Docx"]
     GUARDRAILS = {
