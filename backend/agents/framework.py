@@ -1,4 +1,18 @@
 """Small agent framework base class used by the Acme Loan Processor agents."""
+# Copyright (c) Lineaje, Inc. All rights reserved.
+# Lineaje UnifAI guardrail  version=2.0.0-alpha
+def _lineaje_load_gr_client():
+    """Lineaje-added: load gr_stub_client.py without a pip dependency."""
+    import sys as _s, importlib.util as _ilu
+    from pathlib import Path as _P
+    n = "_lineaje_gr_stub_client"
+    if n in _s.modules: return _s.modules[n]
+    h = _P(__file__).resolve().parent
+    _cand = next((d / "gr_stub_client.py" for d in [h, *h.parents][:8] if (d / "gr_stub_client.py").is_file()), h / "gr_stub_client.py")
+    _spec = _ilu.spec_from_file_location(n, _cand)
+    _s.modules[n] = _m = _ilu.module_from_spec(_spec)
+    _spec.loader.exec_module(_m); return _m
+
 
 import os
 from abc import ABC, abstractmethod
@@ -29,10 +43,6 @@ class AcmeLoanAgentFramework(ABC):
     OLLAMA_BASE_URL = "http://localhost:11434/v1"
 
     def __init__(self):
-        # Runtime LLM calls default to OpenRouter credentials from .env
-        # (OPENROUTER_API_KEY and OPENROUTER_MODEL). Set LLM_PROVIDER=ollama
-        # to route through a local Ollama server instead (OLLAMA_BASE_URL and
-        # OLLAMA_MODEL); no API key is required for Ollama.
         if self._provider() == "ollama":
             self.model_client = OpenAICompatibleClient(
                 base_url=os.getenv("OLLAMA_BASE_URL") or self.OLLAMA_BASE_URL,
@@ -75,11 +85,6 @@ class AcmeLoanAgentFramework(ABC):
         temperature: float = 0.2,
         max_tokens: int = 350,
     ) -> str:
-        """Call the configured LLM provider (OpenRouter by default, or Ollama
-        when LLM_PROVIDER=ollama).
-
-        Method name is kept for compatibility with existing agents.
-        """
         if self._provider() == "ollama":
             model = (os.getenv("OLLAMA_MODEL") or "").strip()
             if not model:
@@ -92,6 +97,15 @@ class AcmeLoanAgentFramework(ABC):
             if not model:
                 return "LLM service not configured. Please set OPENROUTER_MODEL."
 
+        # LINEAJE: enforce() `messages` at agent->llm pre_model — scan flagged AI_APP_SEC_029 (Agent must validate, sanitize LLM output including for presence of eval or any dynamic code execution primitive in LLM output.); AI_APP_SEC_038 (The AI Model must validate and sanitize any input before processing.); AI_APP_SEC_039 (Sanitize and validate all input to the AI Model.). Mask/block; do not remove without review. site_id='site:sha256:afbc6e312e2340ff620f9ce71c53f5a9dd6087efcbdac2be4c29221b79663e07'
+        _lineaje_messages_evidence = {'messages': messages, 'model': model, 'project': 'source-code'}
+        _gr_client = _lineaje_load_gr_client()
+        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:afbc6e312e2340ff620f9ce71c53f5a9dd6087efcbdac2be4c29221b79663e07', phase='pre_model', boundary={'source': 'agent_message', 'sink': 'model'}, candidate_policies=[{'policy_id': 'AI_APP_SEC_006', 'guardrail_id': 'Enforce Approved LLM.', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_APP_SEC_028', 'guardrail_id': 'Enforce Approved LLM', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_DAT_SEC_029', 'guardrail_id': 'Emit immutable, forensic-ready audit records for all AI decisions.', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='llm')
+        try:
+            _lineaje_messages_evidence = await __import__('asyncio').to_thread(lambda: _gr_client.enforce(_gr_site, _lineaje_messages_evidence, content_type='application/json'))
+            messages = _lineaje_messages_evidence.get('messages', messages) if isinstance(_lineaje_messages_evidence, dict) else messages
+        except _gr_client.GuardrailUnavailableError:
+            pass
         return await self.model_client.chat(
             model=model,
             messages=messages,

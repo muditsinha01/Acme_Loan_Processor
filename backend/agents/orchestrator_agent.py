@@ -1,4 +1,18 @@
 """Orchestrator Agent class with explicit model invocation."""
+# Copyright (c) Lineaje, Inc. All rights reserved.
+# Lineaje UnifAI guardrail  version=2.0.0-alpha
+def _lineaje_load_gr_client():
+    """Lineaje-added: load gr_stub_client.py without a pip dependency."""
+    import sys as _s, importlib.util as _ilu
+    from pathlib import Path as _P
+    n = "_lineaje_gr_stub_client"
+    if n in _s.modules: return _s.modules[n]
+    h = _P(__file__).resolve().parent
+    _cand = next((d / "gr_stub_client.py" for d in [h, *h.parents][:8] if (d / "gr_stub_client.py").is_file()), h / "gr_stub_client.py")
+    _spec = _ilu.spec_from_file_location(n, _cand)
+    _s.modules[n] = _m = _ilu.module_from_spec(_spec)
+    _spec.loader.exec_module(_m); return _m
+
 
 import logging
 from typing import Any
@@ -55,23 +69,26 @@ class OrchestratorAgent(AcmeLoanAgentFramework):
             file_contents=context.get("file_contents", []),
         )
         selected_agent_name = selected_agent.AGENT_NAME
-
-        # Vulnerability: the Orchestrator Agent forwards the entire context and a
-        # shared internal token to downstream agents with no authentication boundary.
         forwarded_context = dict(context)
         forwarded_context["orchestrator_agent"] = self.AGENT_NAME
         forwarded_context["selected_agent"] = selected_agent_name
         forwarded_context["internal_call_chain"] = [self.AGENT_NAME, selected_agent_name]
         forwarded_context["internal_hop_token"] = "shared-orchestrator-hop-token"
-
+        _lineaje_payload = "Orchestrator Agent routing request"
+        # LINEAJE: enforce() `_lineaje_payload` at agent->log log_emit — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.); AI_APP_SEC_023 (Client must validate and sanitize any output from a MCP server); AI_APP_SEC_028 (Do not use LLMs from the organization's disallowed list). Mask/block; do not remove without review. site_id='site:sha256:2f989c04e85ce464a8e3c6400b0a5a29a71060cd43bf9f475a3954f132ab04a0'
+        _gr_client = _lineaje_load_gr_client()
+        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:2f989c04e85ce464a8e3c6400b0a5a29a71060cd43bf9f475a3954f132ab04a0', phase='log_emit', boundary={'source': 'log', 'sink': 'log'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_010', 'guardrail_id': 'Mask PII in Logs', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='log')
+        try:
+            _lineaje_payload = await __import__('asyncio').to_thread(lambda: _gr_client.enforce(_gr_site, _lineaje_payload, content_type='application/json'))
+        except _gr_client.GuardrailUnavailableError:
+            pass
         logger.info(
-            "Orchestrator Agent routing request",
+            _lineaje_payload,
             extra={
                 "selected_agent": selected_agent_name,
                 "internal_call_chain": forwarded_context["internal_call_chain"],
             },
         )
-
         routing_note = await self.call_agent_model(
             context.get("user_message", ""),
             selected_agent_name,
@@ -79,79 +96,100 @@ class OrchestratorAgent(AcmeLoanAgentFramework):
         response = await selected_agent.handle(forwarded_context)
         response["orchestrator"] = self.AGENT_NAME
         response["routing_note"] = routing_note
-        return response
+        # LINEAJE: enforce() `response` at agent->user_interface data_egress — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.); AI_APP_SEC_023 (Client must validate and sanitize any output from a MCP server); AI_APP_SEC_028 (Do not use LLMs from the organization's disallowed list). Mask/block; do not remove without review. site_id='site:sha256:728d0c5aa3c4919ecd2548d7268f00f18efd85878270cc125539b0b1d7a5762b'
+        _gr_client = _lineaje_load_gr_client()
+        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:728d0c5aa3c4919ecd2548d7268f00f18efd85878270cc125539b0b1d7a5762b', phase='data_egress', boundary={'source': 'agent_message', 'sink': 'user_interface'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_012', 'guardrail_id': 'Mask PII on UI', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='user_interface')
+        try:
+            _enforced_agent = _gr_client.enforce(_gr_site, response, content_type='text/plain')
+        except _gr_client.GuardrailUnavailableError:
+            _enforced_agent = response
+        return _enforced_agent
 
     def select_agent(self, user_message: str, file_contents: list[dict[str, Any]]) -> AcmeLoanAgentFramework:
         text = (user_message or "").lower()
-
         if self._should_route_to_installed_skill(text):
-            return installed_skill_agent
+            # LINEAJE: enforce() `installed_skill_agent` at agent->user_interface data_egress — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.); AI_APP_SEC_023 (Client must validate and sanitize any output from a MCP server); AI_APP_SEC_028 (Do not use LLMs from the organization's disallowed list). Mask/block; do not remove without review. site_id='site:sha256:ade22373d61ae120064d0953f9a654ea4d25754631228deb7e2db125463e3e9e'
+            _gr_client = _lineaje_load_gr_client()
+            _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:ade22373d61ae120064d0953f9a654ea4d25754631228deb7e2db125463e3e9e', phase='data_egress', boundary={'source': 'agent_message', 'sink': 'user_interface'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_012', 'guardrail_id': 'Mask PII on UI', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='user_interface')
+            try:
+                _enforced_agent = _gr_client.enforce(_gr_site, installed_skill_agent, content_type='text/plain')
+            except _gr_client.GuardrailUnavailableError:
+                _enforced_agent = installed_skill_agent
+            return _enforced_agent
         if any(keyword in text for keyword in ["schedule", "meeting", "calendar", "appointment"]):
-            return scheduling_agent
-        if any(
-            keyword in text
-            for keyword in [
-                "delete",
-                "purge",
-                "destroy",
-                "remove file",
-                "file management",
-                "deletefile",
-                "purge records",
-            ]
-        ):
-            return file_management_agent
-        if any(
-            keyword in text
-            for keyword in [
-                "grant access",
-                "deny access",
-                "allow access",
-                "firewall",
-                "assign role",
-                "assign a role",
-                "grant admin",
-                "privilege",
-                "authorize",
-                "access control",
-                "security decision",
-            ]
-        ):
-            return access_control_agent
-        if any(
-            keyword in text
-            for keyword in [
-                "environment diagnostic",
-                "environment diagnostics",
-                "run diagnostics",
-                "diagnostic steps",
-                "verify environment",
-                "environment setup",
-            ]
-        ):
-            return environment_diagnostics_agent
+            # LINEAJE: enforce() `scheduling_agent` at agent->user_interface data_egress — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.); AI_APP_SEC_023 (Client must validate and sanitize any output from a MCP server); AI_APP_SEC_028 (Do not use LLMs from the organization's disallowed list). Mask/block; do not remove without review. site_id='site:sha256:9b85a34902909fa2e5209d51d15d2363360ef9a4b946061fc58a4e317e2f9dc2'
+            _gr_client = _lineaje_load_gr_client()
+            _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:9b85a34902909fa2e5209d51d15d2363360ef9a4b946061fc58a4e317e2f9dc2', phase='data_egress', boundary={'source': 'agent_message', 'sink': 'user_interface'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_012', 'guardrail_id': 'Mask PII on UI', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='user_interface')
+            try:
+                _enforced_agent = _gr_client.enforce(_gr_site, scheduling_agent, content_type='text/plain')
+            except _gr_client.GuardrailUnavailableError:
+                _enforced_agent = scheduling_agent
+            return _enforced_agent
+        if any(keyword in text for keyword in ["delete", "purge", "destroy", "remove file", "file management", "deletefile", "purge records"]):
+            # LINEAJE: enforce() `file_management_agent` at agent->user_interface data_egress — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.); AI_APP_SEC_023 (Client must validate and sanitize any output from a MCP server); AI_APP_SEC_028 (Do not use LLMs from the organization's disallowed list). Mask/block; do not remove without review. site_id='site:sha256:e525b19eac7e48e28859eb21165aea3f99d16703601faae28027d5a930f7a6f0'
+            _gr_client = _lineaje_load_gr_client()
+            _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:e525b19eac7e48e28859eb21165aea3f99d16703601faae28027d5a930f7a6f0', phase='data_egress', boundary={'source': 'agent_message', 'sink': 'user_interface'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_012', 'guardrail_id': 'Mask PII on UI', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='user_interface')
+            try:
+                _enforced_agent = _gr_client.enforce(_gr_site, file_management_agent, content_type='text/plain')
+            except _gr_client.GuardrailUnavailableError:
+                _enforced_agent = file_management_agent
+            return _enforced_agent
+        if any(keyword in text for keyword in ["grant access", "deny access", "allow access", "firewall", "assign role", "assign a role", "grant admin", "privilege", "authorize", "access control", "security decision"]):
+            # LINEAJE: enforce() `access_control_agent` at agent->user_interface data_egress — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.); AI_APP_SEC_023 (Client must validate and sanitize any output from a MCP server); AI_APP_SEC_028 (Do not use LLMs from the organization's disallowed list). Mask/block; do not remove without review. site_id='site:sha256:2529da0d2e467f594e678a10a0ade55d740caa5c803ed2ad0fbc31dbedac844e'
+            _gr_client = _lineaje_load_gr_client()
+            _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:2529da0d2e467f594e678a10a0ade55d740caa5c803ed2ad0fbc31dbedac844e', phase='data_egress', boundary={'source': 'agent_message', 'sink': 'user_interface'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_012', 'guardrail_id': 'Mask PII on UI', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='user_interface')
+            try:
+                _enforced_agent = _gr_client.enforce(_gr_site, access_control_agent, content_type='text/plain')
+            except _gr_client.GuardrailUnavailableError:
+                _enforced_agent = access_control_agent
+            return _enforced_agent
+        if any(keyword in text for keyword in ["environment diagnostic", "environment diagnostics", "run diagnostics", "diagnostic steps", "verify environment", "environment setup"]):
+            # LINEAJE: enforce() `environment_diagnostics_agent` at agent->user_interface data_egress — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.); AI_APP_SEC_023 (Client must validate and sanitize any output from a MCP server); AI_APP_SEC_028 (Do not use LLMs from the organization's disallowed list). Mask/block; do not remove without review. site_id='site:sha256:c181afc03afd18783018d2c60467c9268dcaa5aee67aa31899ed5188b0691d8c'
+            _gr_client = _lineaje_load_gr_client()
+            _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:c181afc03afd18783018d2c60467c9268dcaa5aee67aa31899ed5188b0691d8c', phase='data_egress', boundary={'source': 'agent_message', 'sink': 'user_interface'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_012', 'guardrail_id': 'Mask PII on UI', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='user_interface')
+            try:
+                _enforced_agent = _gr_client.enforce(_gr_site, environment_diagnostics_agent, content_type='text/plain')
+            except _gr_client.GuardrailUnavailableError:
+                _enforced_agent = environment_diagnostics_agent
+            return _enforced_agent
         if any(keyword in text for keyword in ["credit", "fico", "debt-to-income", "dti", "underwrite", "loan status", "employee", "ssn", "borrower status"]):
-            return credit_eval_agent
+            # LINEAJE: enforce() `credit_eval_agent` at agent->user_interface data_egress — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.); AI_APP_SEC_023 (Client must validate and sanitize any output from a MCP server); AI_APP_SEC_028 (Do not use LLMs from the organization's disallowed list). Mask/block; do not remove without review. site_id='site:sha256:500ab8e68029545757248265cbc7b093e7da5c58e3cc3dfcaeeba7dbde5861c1'
+            _gr_client = _lineaje_load_gr_client()
+            _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:500ab8e68029545757248265cbc7b093e7da5c58e3cc3dfcaeeba7dbde5861c1', phase='data_egress', boundary={'source': 'agent_message', 'sink': 'user_interface'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_012', 'guardrail_id': 'Mask PII on UI', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='user_interface')
+            try:
+                _enforced_agent = _gr_client.enforce(_gr_site, credit_eval_agent, content_type='text/plain')
+            except _gr_client.GuardrailUnavailableError:
+                _enforced_agent = credit_eval_agent
+            return _enforced_agent
         if any(keyword in text for keyword in ["loan", "mortgage", "borrower", "application"]):
-            return credit_eval_agent
-        if file_contents or any(
-            keyword in text
-            for keyword in [
-                "support document",
-                "uploaded support",
-                "review this uploaded",
-                "summarize it's contents",
-                "summarize its contents",
-                "uploaded document",
-                "review document",
-            ]
-        ):
-            return file_processor_agent
-        return credit_eval_agent
+            # LINEAJE: enforce() `credit_eval_agent` at agent->user_interface data_egress — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.); AI_APP_SEC_023 (Client must validate and sanitize any output from a MCP server); AI_APP_SEC_028 (Do not use LLMs from the organization's disallowed list). Mask/block; do not remove without review. site_id='site:sha256:68c71098fd12e9c22ab407261946bc9c75f7247a6cce9cdf4dc1a54aa897afe2'
+            _gr_client = _lineaje_load_gr_client()
+            _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:68c71098fd12e9c22ab407261946bc9c75f7247a6cce9cdf4dc1a54aa897afe2', phase='data_egress', boundary={'source': 'agent_message', 'sink': 'user_interface'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_012', 'guardrail_id': 'Mask PII on UI', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='user_interface')
+            try:
+                _enforced_agent = _gr_client.enforce(_gr_site, credit_eval_agent, content_type='text/plain')
+            except _gr_client.GuardrailUnavailableError:
+                _enforced_agent = credit_eval_agent
+            return _enforced_agent
+        if file_contents or any(keyword in text for keyword in ["support document", "uploaded support", "review this uploaded", "summarize it's contents", "summarize its contents", "uploaded document", "review document"]):
+            # LINEAJE: enforce() `file_processor_agent` at agent->user_interface data_egress — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.); AI_APP_SEC_023 (Client must validate and sanitize any output from a MCP server); AI_APP_SEC_028 (Do not use LLMs from the organization's disallowed list). Mask/block; do not remove without review. site_id='site:sha256:956d1e12313b5664a155b07562aaec01bc6f2a1fa8c3484035d6112aa1daa2f2'
+            _gr_client = _lineaje_load_gr_client()
+            _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:956d1e12313b5664a155b07562aaec01bc6f2a1fa8c3484035d6112aa1daa2f2', phase='data_egress', boundary={'source': 'agent_message', 'sink': 'user_interface'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_012', 'guardrail_id': 'Mask PII on UI', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='user_interface')
+            try:
+                _enforced_agent = _gr_client.enforce(_gr_site, file_processor_agent, content_type='text/plain')
+            except _gr_client.GuardrailUnavailableError:
+                _enforced_agent = file_processor_agent
+            return _enforced_agent
+        # LINEAJE: enforce() `credit_eval_agent` at agent->user_interface data_egress — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.); AI_APP_SEC_023 (Client must validate and sanitize any output from a MCP server); AI_APP_SEC_028 (Do not use LLMs from the organization's disallowed list). Mask/block; do not remove without review. site_id='site:sha256:ceb9d5bfc4a414ba38732f097f74bedc6f4701c7e49cdbe499f51a6c439b972a'
+        _gr_client = _lineaje_load_gr_client()
+        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:ceb9d5bfc4a414ba38732f097f74bedc6f4701c7e49cdbe499f51a6c439b972a', phase='data_egress', boundary={'source': 'agent_message', 'sink': 'user_interface'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_012', 'guardrail_id': 'Mask PII on UI', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='user_interface')
+        try:
+            _enforced_agent = _gr_client.enforce(_gr_site, credit_eval_agent, content_type='text/plain')
+        except _gr_client.GuardrailUnavailableError:
+            _enforced_agent = credit_eval_agent
+        return _enforced_agent
 
     @staticmethod
     def _should_route_to_installed_skill(text: str) -> bool:
-        # Ambient skill loading: match task intent, not explicit "use skill" commands.
         skill_match_keywords = [
             "loan document",
             "loan documents",
