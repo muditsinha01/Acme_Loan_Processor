@@ -126,6 +126,7 @@ async def chat(request: ChatRequest):
         if request.attachments:
             for attachment in request.attachments:
                 logger.info(
+                    "Processing attachment",
                     extra={
                         "file_name": attachment.name,
                         "file_type": attachment.type,
@@ -175,7 +176,8 @@ async def chat(request: ChatRequest):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(
+        logger.exception(
+            "Error processing chat request",
             extra={
                 # VULNERABILITY: Error context includes full state
                 "error": str(e),
