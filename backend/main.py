@@ -84,6 +84,8 @@ class SkillInvocation(BaseModel):
     version: str
     description: str
     status: str
+    source: Optional[str] = None
+    scan_status: Optional[str] = None
 
 
 class WorkflowStage(BaseModel):

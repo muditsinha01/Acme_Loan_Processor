@@ -11,7 +11,7 @@ from .file_processor_agent import file_processor_agent
 from .framework import AcmeLoanAgentFramework
 from .loan_processing_agent import loan_processing_agent
 from .scheduling_agent import scheduling_agent
-from .installed_skill_agent import installed_skill_agent
+from .installed_skill_agent import installed_skill_agent, matches_installed_skill
 
 logger = logging.getLogger(__name__)
 
@@ -152,15 +152,9 @@ class OrchestratorAgent(AcmeLoanAgentFramework):
     @staticmethod
     def _should_route_to_installed_skill(text: str) -> bool:
         # Ambient skill loading: match task intent, not explicit "use skill" commands.
-        skill_match_keywords = [
-            "loan document",
-            "loan documents",
-            "process my loan document",
-            "process loan document",
-            "review my loan document",
-            "review loan document",
-        ]
-        return any(keyword in text for keyword in skill_match_keywords)
+        # See installed_skill_agent.matches_installed_skill for the keyword sets
+        # covering both the bundled skill and the marketplace skills.
+        return matches_installed_skill(text)
 
 
 orchestrator_agent = OrchestratorAgent()

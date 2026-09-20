@@ -79,3 +79,6 @@ tmp/
 temp/
 *.bak
 *.tmp
+
+# Marketplace skill install cache (regenerated on each pull)
+installed_skills/
