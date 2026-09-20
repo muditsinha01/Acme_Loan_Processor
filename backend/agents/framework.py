@@ -26,24 +26,39 @@ class AcmeLoanAgentFramework(ABC):
     IS_SCAN_ONLY = False
 
     OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+    OLLAMA_BASE_URL = "http://localhost:11434/v1"
 
     def __init__(self):
-        # Runtime LLM calls use OpenRouter credentials from .env:
-        # OPENROUTER_API_KEY and OPENROUTER_MODEL.
-        self.model_client = OpenAICompatibleClient(
-            base_url=self.OPENROUTER_BASE_URL,
-            api_key=os.getenv("OPENROUTER_API_KEY"),
-        )
+        # Runtime LLM calls default to OpenRouter credentials from .env
+        # (OPENROUTER_API_KEY and OPENROUTER_MODEL). Set LLM_PROVIDER=ollama
+        # to route through a local Ollama server instead (OLLAMA_BASE_URL and
+        # OLLAMA_MODEL); no API key is required for Ollama.
+        if self._provider() == "ollama":
+            self.model_client = OpenAICompatibleClient(
+                base_url=os.getenv("OLLAMA_BASE_URL") or self.OLLAMA_BASE_URL,
+                api_key=os.getenv("OLLAMA_API_KEY"),
+            )
+        else:
+            self.model_client = OpenAICompatibleClient(
+                base_url=self.OPENROUTER_BASE_URL,
+                api_key=os.getenv("OPENROUTER_API_KEY"),
+            )
+
+    @staticmethod
+    def _provider() -> str:
+        return (os.getenv("LLM_PROVIDER") or "openrouter").strip().lower()
 
     def to_dict(self) -> dict[str, Any]:
+        provider = self._provider()
         return {
             "id": self.AGENT_ID,
             "name": self.AGENT_NAME,
             "version": self.VERSION,
             "framework": self.FRAMEWORK_NAME,
             "model": self.MODEL_NAME,
-            "provider": "OpenRouter",
+            "provider": "Ollama" if provider == "ollama" else "OpenRouter",
             "openrouter_model": os.getenv("OPENROUTER_MODEL"),
+            "ollama_model": os.getenv("OLLAMA_MODEL"),
             "bedrock_model_id": self.BEDROCK_MODEL_ID,
             "bedrock_fallback_model_id": self.BEDROCK_FALLBACK_MODEL_ID,
             "description": self.DESCRIPTION,
@@ -60,16 +75,22 @@ class AcmeLoanAgentFramework(ABC):
         temperature: float = 0.2,
         max_tokens: int = 350,
     ) -> str:
-        """Call OpenRouter using OPENROUTER_API_KEY + OPENROUTER_MODEL.
+        """Call the configured LLM provider (OpenRouter by default, or Ollama
+        when LLM_PROVIDER=ollama).
 
         Method name is kept for compatibility with existing agents.
         """
-        api_key = (os.getenv("OPENROUTER_API_KEY") or "").strip()
-        model = (os.getenv("OPENROUTER_MODEL") or "").strip()
-        if not api_key:
-            return "LLM service not configured. Please set OPENROUTER_API_KEY."
-        if not model:
-            return "LLM service not configured. Please set OPENROUTER_MODEL."
+        if self._provider() == "ollama":
+            model = (os.getenv("OLLAMA_MODEL") or "").strip()
+            if not model:
+                return "LLM service not configured. Please set OLLAMA_MODEL."
+        else:
+            api_key = (os.getenv("OPENROUTER_API_KEY") or "").strip()
+            model = (os.getenv("OPENROUTER_MODEL") or "").strip()
+            if not api_key:
+                return "LLM service not configured. Please set OPENROUTER_API_KEY."
+            if not model:
+                return "LLM service not configured. Please set OPENROUTER_MODEL."
 
         return await self.model_client.chat(
             model=model,
