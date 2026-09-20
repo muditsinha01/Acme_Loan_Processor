@@ -21,10 +21,11 @@ def _lineaje_load_gr_client():
 
 import asyncio
 import logging
-import os
 from typing import Any, Optional
 
 import requests
+
+from llm.settings import get_llm_api_key, get_llm_base_url, get_llm_timeout
 
 logger = logging.getLogger(__name__)
 
@@ -37,13 +38,9 @@ class OpenAICompatibleClient:
         base_url: Optional[str] = None,
         api_key: Optional[str] = None,
     ):
-        # Use OpenRouter credentials from the environment.
-        self.base_url = (
-            base_url
-            or os.getenv("OPENROUTER_BASE_URL")
-            or "https://openrouter.ai/api/v1"
-        ).rstrip("/")
-        self.api_key = api_key or os.getenv("OPENROUTER_API_KEY")
+        self.base_url = (base_url or get_llm_base_url()).rstrip("/")
+        self.api_key = api_key or get_llm_api_key()
+        self.timeout = get_llm_timeout()
 
     async def chat(
         self,
@@ -69,7 +66,7 @@ class OpenAICompatibleClient:
                     f"{self.base_url}/chat/completions",
                     json=payload,
                     headers=headers,
-                    timeout=20,
+                    timeout=self.timeout,
                 )
                 # LINEAJE: enforce() `response` at api->agent post_tool — scan flagged AI_IAC_015 (Enforce URL allowlists for agent fetches, tools, and outbound HTTP.). Mask/block; do not remove without review. site_id='site:sha256:98bf62bcf63737cb4c93e6a9af71c337f7236fbb6fc04a46560d3ecfc4f2128e'
                 _gr_client = _lineaje_load_gr_client()

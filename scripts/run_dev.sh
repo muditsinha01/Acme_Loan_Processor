@@ -23,17 +23,26 @@ source "$PROJECT_ROOT/scripts/python_helper.sh"
 echo ""
 
 # Check for required environment variables
-if [ -z "$OPENROUTER_API_KEY" ]; then
+using_ollama=false
+if [ "${LLM_PROVIDER:-}" = "ollama" ] || grep -qE '^LLM_PROVIDER=ollama' "$PROJECT_ROOT/.env" 2>/dev/null; then
+    using_ollama=true
+fi
+
+if [ "$using_ollama" = true ]; then
+    echo "LLM provider: Ollama (local)"
+    echo ""
+elif [ -z "$OPENROUTER_API_KEY" ]; then
     # Also accept values loaded later from .env by the backend process.
     if [ ! -f "$PROJECT_ROOT/.env" ] || ! grep -q '^OPENROUTER_API_KEY=.\+' "$PROJECT_ROOT/.env"; then
-        echo "WARNING: OPENROUTER_API_KEY not set"
-        echo "The LLM features will not work without an OpenRouter API key."
-        echo "Set it in .env: OPENROUTER_API_KEY=..."
+        echo "WARNING: OPENROUTER_API_KEY not set and LLM_PROVIDER is not ollama"
+        echo "Set OpenRouter in .env, or use local Ollama:"
+        echo "  LLM_PROVIDER=ollama"
+        echo "  OLLAMA_MODEL=llama3.2"
         echo ""
     fi
 fi
 
-if [ -z "$OPENROUTER_MODEL" ]; then
+if [ "$using_ollama" != true ] && [ -z "$OPENROUTER_MODEL" ]; then
     if [ ! -f "$PROJECT_ROOT/.env" ] || ! grep -q '^OPENROUTER_MODEL=.\+' "$PROJECT_ROOT/.env"; then
         echo "WARNING: OPENROUTER_MODEL not set"
         echo "Set it in .env, for example: OPENROUTER_MODEL=meta-llama/llama-3.1-70b-instruct"

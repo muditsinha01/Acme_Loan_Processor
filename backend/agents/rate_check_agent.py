@@ -15,11 +15,11 @@ def _lineaje_load_gr_client():
 
 
 import logging
-import os
 import re
 from typing import Any
 
 from llm.openai_compatible import OpenAICompatibleClient
+from llm.settings import get_llm_api_key, get_llm_base_url, get_llm_model, get_llm_provider, llm_config_error
 
 from .framework import AcmeLoanAgentFramework
 
@@ -48,15 +48,15 @@ class RateCheckAgent(AcmeLoanAgentFramework):
     def __init__(self):
         super().__init__()
         self.openrouter_client = OpenAICompatibleClient(
-            base_url=self.OPENROUTER_BASE_URL,
-            api_key=os.getenv("OPENROUTER_API_KEY"),
+            base_url=get_llm_base_url(),
+            api_key=get_llm_api_key(),
         )
 
     def to_dict(self) -> dict[str, Any]:
         metadata = super().to_dict()
-        metadata["provider"] = "OpenRouter"
-        metadata["openrouter_base_url"] = self.OPENROUTER_BASE_URL
-        metadata["openrouter_model"] = os.getenv("OPENROUTER_MODEL")
+        metadata["provider"] = "Ollama" if get_llm_provider() == "ollama" else "OpenRouter"
+        metadata["openrouter_base_url"] = get_llm_base_url()
+        metadata["openrouter_model"] = get_llm_model()
         # LINEAJE: enforce() `metadata` at agent->user_interface data_egress — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.); AI_APP_SEC_028 (Do not use LLMs from the organization's disallowed list); AI_APP_SEC_067 (Detect direct string interpolation of untrusted input into LLM prompts). Mask/block; do not remove without review. site_id='site:sha256:0df19c3582f994fd226b63d4b3c50449cc5e39c6b94467c9dc70cc89cfdf4dcd'
         _gr_client = _lineaje_load_gr_client()
         _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:0df19c3582f994fd226b63d4b3c50449cc5e39c6b94467c9dc70cc89cfdf4dcd', phase='data_egress', boundary={'source': 'agent_message', 'sink': 'user_interface'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_012', 'guardrail_id': 'Mask PII on UI', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='user_interface')
@@ -93,11 +93,10 @@ class RateCheckAgent(AcmeLoanAgentFramework):
         return "\n".join(safe_lines).strip() or "Rate summary unavailable."
 
     async def call_agent_model(self, user_message: str) -> str:
-        model = os.getenv("OPENROUTER_MODEL")
-        if not os.getenv("OPENROUTER_API_KEY"):
-            return "LLM service not configured. Please set OPENROUTER_API_KEY."
-        if not model:
-            return "LLM service not configured. Please set OPENROUTER_MODEL."
+        config_error = llm_config_error()
+        if config_error:
+            return config_error
+        model = get_llm_model()
 
         _lineaje_payload = "Rate check LLM request"
         # LINEAJE: enforce() `_lineaje_payload` at agent->log log_emit — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.); AI_APP_SEC_028 (Do not use LLMs from the organization's disallowed list); AI_APP_SEC_067 (Detect direct string interpolation of untrusted input into LLM prompts). Mask/block; do not remove without review. site_id='site:sha256:1c5ab84b3fc1af40ad31a390eda6314849d3834d077e69f40bbf40f23c96917a'
@@ -177,7 +176,7 @@ class RateCheckAgent(AcmeLoanAgentFramework):
             "agent": self.AGENT_NAME,
             "model": self.MODEL_NAME,
             "framework": self.FRAMEWORK_NAME,
-            "provider": "OpenRouter",
+            "provider": "Ollama" if get_llm_provider() == "ollama" else "OpenRouter",
         }
 
 

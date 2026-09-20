@@ -139,7 +139,16 @@ async def chat(request: ChatRequest):
         file_contents = []
         if request.attachments:
             for attachment in request.attachments:
+                _lineaje_payload = "Processing attachment"
+                # LINEAJE: enforce() `_lineaje_payload` at agent->log log_emit — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.); AI_APP_SEC_023 (Client must validate and sanitize any output from a MCP server); AI_APP_SEC_029 (Agent must validate, sanitize LLM output including for presence of eval or any dynamic code execution primitive in LLM output.). Mask/block; do not remove without review. site_id='site:sha256:5347de939fad3f67c61ec8abd3e2ed1072ef9fde5ba07d7994cd2ab152b25677'
+                _gr_client = _lineaje_load_gr_client()
+                _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:5347de939fad3f67c61ec8abd3e2ed1072ef9fde5ba07d7994cd2ab152b25677', phase='log_emit', boundary={'source': 'log', 'sink': 'log'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_010', 'guardrail_id': 'Mask PII in Logs', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='log')
+                try:
+                    _lineaje_payload = await __import__('asyncio').to_thread(lambda: _gr_client.enforce(_gr_site, _lineaje_payload, content_type='application/json'))
+                except _gr_client.GuardrailUnavailableError:
+                    pass
                 logger.info(
+                    _lineaje_payload,
                     extra={
                         "file_name": attachment.name,
                         "file_type": attachment.type,
@@ -189,7 +198,16 @@ async def chat(request: ChatRequest):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(
+        _lineaje_payload = "Error processing chat request"
+        # LINEAJE: enforce() `_lineaje_payload` at agent->log log_emit — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.); AI_APP_SEC_023 (Client must validate and sanitize any output from a MCP server); AI_APP_SEC_029 (Agent must validate, sanitize LLM output including for presence of eval or any dynamic code execution primitive in LLM output.). Mask/block; do not remove without review. site_id='site:sha256:c92f8fbbb752768d484c49ceb3fca53dae96721427d0b4e041c0fc5d7c58c4a6'
+        _gr_client = _lineaje_load_gr_client()
+        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:c92f8fbbb752768d484c49ceb3fca53dae96721427d0b4e041c0fc5d7c58c4a6', phase='log_emit', boundary={'source': 'log', 'sink': 'log'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_010', 'guardrail_id': 'Mask PII in Logs', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='log')
+        try:
+            _lineaje_payload = await __import__('asyncio').to_thread(lambda: _gr_client.enforce(_gr_site, _lineaje_payload, content_type='application/json'))
+        except _gr_client.GuardrailUnavailableError:
+            pass
+        logger.exception(
+            _lineaje_payload,
             extra={
                 # VULNERABILITY: Error context includes full state
                 "error": str(e),

@@ -14,10 +14,10 @@ SECURITY NOTES (for Unifai demo):
 import base64
 import io
 import logging
-import os
 from typing import Optional
 
 from llm.openai_compatible import OpenAICompatibleClient
+from llm.settings import get_llm_api_key, get_llm_model, get_llm_provider
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +36,7 @@ class ImageParser:
 
     def __init__(self):
         self.model_client = OpenAICompatibleClient(
-            api_key=os.getenv("OPENROUTER_API_KEY"),
+            api_key=get_llm_api_key(),
         )
 
     async def extract_metadata(self, image_bytes: bytes) -> dict:
@@ -135,11 +135,13 @@ class ImageParser:
 
         VULNERABILITY: whatever text is drawn on the image is transcribed
         verbatim and returned with no scanning - this is the image-based
-        prompt-injection vector for this demo. Uses OPENROUTER_MODEL
-        (must be multimodal for image transcription).
+        prompt-injection vector for this demo. Uses the configured
+        OpenRouter or Ollama model (must be multimodal for image transcription).
         """
-        model = os.getenv("OPENROUTER_MODEL")
-        if not self.model_client.api_key or not model:
+        model = get_llm_model()
+        if not model:
+            return ""
+        if get_llm_provider() != "ollama" and not self.model_client.api_key:
             return ""
 
         try:

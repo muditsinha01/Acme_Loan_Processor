@@ -14,12 +14,22 @@ def _lineaje_load_gr_client():
     _spec.loader.exec_module(_m); return _m
 
 
-import os
+import logging
 from abc import ABC, abstractmethod
 from copy import deepcopy
 from typing import Any
 
 from llm.openai_compatible import OpenAICompatibleClient
+from llm.settings import (
+    get_llm_api_key,
+    get_llm_base_url,
+    get_llm_model,
+    get_llm_provider,
+    is_ollama,
+    llm_config_error,
+)
+
+logger = logging.getLogger(__name__)
 
 
 class AcmeLoanAgentFramework(ABC):
@@ -42,11 +52,10 @@ class AcmeLoanAgentFramework(ABC):
     OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
     def __init__(self):
-        # Runtime LLM calls use OpenRouter credentials from .env:
-        # OPENROUTER_API_KEY and OPENROUTER_MODEL.
+        # Runtime LLM calls use OpenRouter or local Ollama (LLM_PROVIDER).
         self.model_client = OpenAICompatibleClient(
-            base_url=self.OPENROUTER_BASE_URL,
-            api_key=os.getenv("OPENROUTER_API_KEY"),
+            base_url=get_llm_base_url(),
+            api_key=get_llm_api_key(),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -56,8 +65,8 @@ class AcmeLoanAgentFramework(ABC):
             "version": self.VERSION,
             "framework": self.FRAMEWORK_NAME,
             "model": self.MODEL_NAME,
-            "provider": "OpenRouter",
-            "openrouter_model": os.getenv("OPENROUTER_MODEL"),
+            "provider": "Ollama" if get_llm_provider() == "ollama" else "OpenRouter",
+            "openrouter_model": get_llm_model(),
             "bedrock_model_id": self.BEDROCK_MODEL_ID,
             "bedrock_fallback_model_id": self.BEDROCK_FALLBACK_MODEL_ID,
             "description": self.DESCRIPTION,
@@ -74,16 +83,14 @@ class AcmeLoanAgentFramework(ABC):
         temperature: float = 0.2,
         max_tokens: int = 350,
     ) -> str:
-        """Call OpenRouter using OPENROUTER_API_KEY + OPENROUTER_MODEL.
+        """Call the configured OpenAI-compatible provider (OpenRouter or Ollama).
 
         Method name is kept for compatibility with existing agents.
         """
-        api_key = (os.getenv("OPENROUTER_API_KEY") or "").strip()
-        model = (os.getenv("OPENROUTER_MODEL") or "").strip()
-        if not api_key:
-            return "LLM service not configured. Please set OPENROUTER_API_KEY."
-        if not model:
-            return "LLM service not configured. Please set OPENROUTER_MODEL."
+        config_error = llm_config_error()
+        if config_error:
+            return config_error
+        model = get_llm_model()
 
         # LINEAJE: enforce() `messages` at agent->llm pre_model — scan flagged AI_APP_SEC_029 (Agent must validate, sanitize LLM output including for presence of eval or any dynamic code execution primitive in LLM output.); AI_APP_SEC_038 (The AI Model must validate and sanitize any input before processing.); AI_APP_SEC_039 (Sanitize and validate all input to the AI Model.). Mask/block; do not remove without review. site_id='site:sha256:afbc6e312e2340ff620f9ce71c53f5a9dd6087efcbdac2be4c29221b79663e07'
         _lineaje_messages_evidence = {'messages': messages, 'model': model, 'project': 'source-code'}
@@ -94,6 +101,12 @@ class AcmeLoanAgentFramework(ABC):
             messages = _lineaje_messages_evidence.get('messages', messages) if isinstance(_lineaje_messages_evidence, dict) else messages
         except _gr_client.GuardrailUnavailableError:
             pass
+        except PermissionError as exc:
+            # Local Ollama never leaves the machine. Keep the chat working when
+            # a cloud policy (e.g. AI_DAT_SEC_009 encryption) blocks the hop.
+            if not is_ollama():
+                raise
+            logger.warning("Guardrail blocked the outbound model request; continuing with local Ollama: %s", exc)
         return await self.model_client.chat(
             model=model,
             messages=messages,

@@ -111,6 +111,17 @@ class OrchestratorAgent(AcmeLoanAgentFramework):
         return response
 
     def select_agent(self, user_message: str, file_contents: list[dict[str, Any]]) -> AcmeLoanAgentFramework:
+        # Lineaje stubs reassign these imported names. Bind locals first so
+        # `name = enforce(..., name)` does not raise UnboundLocalError.
+        _agents = globals()
+        credit_eval_agent = _agents["credit_eval_agent"]
+        file_processor_agent = _agents["file_processor_agent"]
+        file_management_agent = _agents["file_management_agent"]
+        access_control_agent = _agents["access_control_agent"]
+        scheduling_agent = _agents["scheduling_agent"]
+        installed_skill_agent = _agents["installed_skill_agent"]
+        environment_diagnostics_agent = _agents["environment_diagnostics_agent"]
+
         text = (user_message or "").lower()
 
         if self._should_route_to_installed_skill(text):
