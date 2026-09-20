@@ -48,6 +48,97 @@ export interface PolicyError {
   details?: Record<string, unknown>
 }
 
+const CHAT_JOB_POLL_INTERVAL_MS = 30000
+const CHAT_JOB_MAX_POLLS = 20 // ~10 minutes of polling before giving up
+const CHAT_JOB_POLL_RETRY_LIMIT = 3
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+/**
+ * Starts a chat job and polls for its result instead of holding one long
+ * connection open through POST /chat — a slow guardrail service can push
+ * that request past 30s, which is long enough for a dev --reload restart
+ * or a proxy to reset the connection mid-request.
+ */
+async function startAndPollChatJob(payload: {
+  message: string
+  attachments: FileAttachment[]
+  conversation_id: string
+}): Promise<{ response: Response; data: any }> {
+  const startResponse = await fetch('/api/backend/chat/jobs', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  const startData = await startResponse.json()
+
+  if (!startResponse.ok || !startData.job_id) {
+    return {
+      response: startResponse,
+      data: {
+        status: 'error',
+        detail: startData.detail || 'Failed to start chat job',
+        policy_error: startData.policy_error,
+      },
+    }
+  }
+
+  const jobId = startData.job_id
+  let consecutivePollFailures = 0
+
+  for (let attempt = 0; attempt < CHAT_JOB_MAX_POLLS; attempt++) {
+    await sleep(CHAT_JOB_POLL_INTERVAL_MS)
+
+    let pollResponse: Response
+    try {
+      pollResponse = await fetch(`/api/backend/chat/jobs/${jobId}`)
+    } catch {
+      consecutivePollFailures += 1
+      if (consecutivePollFailures > CHAT_JOB_POLL_RETRY_LIMIT) {
+        return {
+          response: new Response(null, { status: 503 }),
+          data: {
+            status: 'error',
+            detail: 'Lost connection to the backend while waiting for a response.',
+            policy_error: { type: 'general', message: 'Polling failed repeatedly' },
+          },
+        }
+      }
+      continue
+    }
+
+    if (pollResponse.status === 404) {
+      // In-memory job store is gone — most likely the dev backend restarted.
+      return {
+        response: pollResponse,
+        data: {
+          status: 'error',
+          detail: 'The backend restarted while processing. Please resend your message.',
+          policy_error: { type: 'general', message: 'job_not_found' },
+        },
+      }
+    }
+
+    const pollData = await pollResponse.json()
+    consecutivePollFailures = 0
+
+    if (pollData.status && pollData.status !== 'pending') {
+      return { response: pollResponse, data: pollData }
+    }
+  }
+
+  return {
+    response: new Response(null, { status: 504 }),
+    data: {
+      status: 'error',
+      detail: 'Timed out waiting for a response.',
+      policy_error: { type: 'general', message: 'chat_job_timeout' },
+    },
+  }
+}
+
 export function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
@@ -128,20 +219,11 @@ export function ChatInterface() {
     }
 
     try {
-      const apiPromise = fetch('/api/backend/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message: messageText,
-          attachments,
-          conversation_id: uuidv4(),
-        }),
-      }).then(async (response) => ({
-        response,
-        data: await response.json(),
-      }))
+      const apiPromise = startAndPollChatJob({
+        message: messageText,
+        attachments,
+        conversation_id: uuidv4(),
+      })
 
       if (skillWorkflow) {
         const initialStages = buildSkillWorkflowStages(extractDocumentNumber(messageText))
@@ -174,9 +256,9 @@ export function ChatInterface() {
           apiPromise,
         ])
 
-        const { response, data } = apiResult
+        const { data } = apiResult
 
-        if (!response.ok) {
+        if (data.status === 'error') {
           const errorMessage: Message = {
             id: uuidv4(),
             role: 'assistant',
@@ -219,9 +301,9 @@ export function ChatInterface() {
           ])
         }
       } else {
-        const { response, data } = await apiPromise
+        const { data } = await apiPromise
 
-        if (!response.ok) {
+        if (data.status === 'error') {
           const errorMessage: Message = {
             id: uuidv4(),
             role: 'assistant',

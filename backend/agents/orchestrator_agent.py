@@ -12,8 +12,11 @@ from .framework import AcmeLoanAgentFramework
 from .loan_processing_agent import loan_processing_agent
 from .scheduling_agent import scheduling_agent
 from .installed_skill_agent import installed_skill_agent, matches_installed_skill
+from policies.runtime import LLMResponseGuard
 
 logger = logging.getLogger(__name__)
+
+_response_guard = LLMResponseGuard()
 
 
 class OrchestratorAgent(AcmeLoanAgentFramework):
@@ -79,6 +82,12 @@ class OrchestratorAgent(AcmeLoanAgentFramework):
         response = await selected_agent.handle(forwarded_context)
         response["orchestrator"] = self.AGENT_NAME
         response["routing_note"] = routing_note
+
+        if isinstance(response.get("response"), str):
+            guard_result = await _response_guard.validate(response["response"])
+            if guard_result.violations:
+                response["response"] = guard_result.filtered_response
+
         return response
 
     def select_agent(self, user_message: str, file_contents: list[dict[str, Any]]) -> AcmeLoanAgentFramework:
