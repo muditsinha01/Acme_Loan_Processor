@@ -6,8 +6,10 @@ demo UI. The backend now routes through a central agent catalog so the agent
 names, model names, and MCP server names are easy to inspect in source.
 """
 
+import asyncio
 import base64
 import json
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -110,16 +112,12 @@ async def health_check():
     return {"status": "healthy", "service": "acme-loan-processor"}
 
 
-@app.post("/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest):
-    """
-    Main chat endpoint that processes user messages and file uploads.
-
-    This endpoint:
-    1. Receives user messages and optional file attachments
-    2. Processes files through the File Processor Agent
-    3. Routes the request through the Orchestrator Agent
-    4. Returns the agent response
+async def _process_chat(request: ChatRequest) -> dict:
+    """Core chat processing shared by the synchronous /chat endpoint and the
+    background job endpoints below. Returns {"ok": True, ...ChatResponse
+    fields} on success, or {"ok": False, "detail": ..., "policy_error": ...}
+    on failure — never raises, so callers running this as a background task
+    don't need their own top-level try/except.
     """
     try:
         file_contents = []
@@ -153,28 +151,19 @@ async def chat(request: ChatRequest):
 
         response = await handle_chat_request(context)
 
-        skill_invocation = response.get("skill_invocation")
-        workflow_stages = response.get("workflow_stages")
-        return ChatResponse(
-            response=response.get("response", "I processed your request."),
-            conversation_id=request.conversation_id,
-            policy_warning=response.get("policy_warning"),
-            workflow_status=response.get("workflow_status"),
-            agent=response.get("agent"),
-            skill_used=response.get("skill_used"),
-            skill_content_bytes=response.get("skill_content_bytes"),
-            workflow_stages=(
-                [WorkflowStage(**stage) for stage in workflow_stages]
-                if workflow_stages
-                else None
-            ),
-            skill_invocation=(
-                SkillInvocation(**skill_invocation) if skill_invocation else None
-            ),
-        )
+        return {
+            "ok": True,
+            "response": response.get("response", "I processed your request."),
+            "conversation_id": request.conversation_id,
+            "policy_warning": response.get("policy_warning"),
+            "workflow_status": response.get("workflow_status"),
+            "agent": response.get("agent"),
+            "skill_used": response.get("skill_used"),
+            "skill_content_bytes": response.get("skill_content_bytes"),
+            "workflow_stages": response.get("workflow_stages"),
+            "skill_invocation": response.get("skill_invocation"),
+        }
 
-    except HTTPException:
-        raise
     except Exception as e:
         logger.exception(
             "Error processing chat request",
@@ -187,16 +176,99 @@ async def chat(request: ChatRequest):
                 }
             }
         )
+        return {
+            "ok": False,
+            "detail": "An error occurred processing your request",
+            "policy_error": {
+                "type": "general",
+                "message": str(e)
+            },
+        }
+
+
+@app.post("/chat", response_model=ChatResponse)
+async def chat(request: ChatRequest):
+    """
+    Main chat endpoint that processes user messages and file uploads.
+
+    This endpoint:
+    1. Receives user messages and optional file attachments
+    2. Processes files through the File Processor Agent
+    3. Routes the request through the Orchestrator Agent
+    4. Returns the agent response
+
+    Guardrail checks in this pipeline can each take several seconds, and a
+    slow/unreachable GR service can push total request time past 30s — long
+    enough for a dev-mode --reload restart or a proxy to drop the
+    connection mid-request. Prefer POST /chat/jobs + GET /chat/jobs/{id}
+    (polling) for UI use; this endpoint stays for direct/API callers.
+    """
+    result = await _process_chat(request)
+    if not result["ok"]:
         return JSONResponse(
             status_code=500,
-            content={
-                "detail": "An error occurred processing your request",
-                "policy_error": {
-                    "type": "general",
-                    "message": str(e)
-                }
-            }
+            content={"detail": result["detail"], "policy_error": result["policy_error"]},
         )
+    return ChatResponse(
+        response=result["response"],
+        conversation_id=result["conversation_id"],
+        policy_warning=result["policy_warning"],
+        workflow_status=result["workflow_status"],
+        agent=result["agent"],
+        skill_used=result["skill_used"],
+        skill_content_bytes=result["skill_content_bytes"],
+        workflow_stages=(
+            [WorkflowStage(**stage) for stage in result["workflow_stages"]]
+            if result["workflow_stages"]
+            else None
+        ),
+        skill_invocation=(
+            SkillInvocation(**result["skill_invocation"]) if result["skill_invocation"] else None
+        ),
+    )
+
+
+# In-memory job store for the polling flow below. Fine for this single-process
+# demo backend; a process restart (e.g. uvicorn --reload) loses pending jobs,
+# which the client treats as "job not found" and resubmits.
+_CHAT_JOBS: dict[str, dict] = {}
+
+
+class ChatJobStartResponse(BaseModel):
+    job_id: str
+
+
+async def _run_chat_job(job_id: str, request: ChatRequest) -> None:
+    result = await _process_chat(request)
+    if result["ok"]:
+        _CHAT_JOBS[job_id] = {"status": "done", **{k: v for k, v in result.items() if k != "ok"}}
+    else:
+        _CHAT_JOBS[job_id] = {
+            "status": "error",
+            "detail": result["detail"],
+            "policy_error": result["policy_error"],
+        }
+
+
+@app.post("/chat/jobs", response_model=ChatJobStartResponse)
+async def start_chat_job(request: ChatRequest):
+    """Start chat processing in the background and return a job id right away.
+
+    Use this + GET /chat/jobs/{job_id} to poll instead of holding one long
+    connection open through POST /chat.
+    """
+    job_id = str(uuid.uuid4())
+    _CHAT_JOBS[job_id] = {"status": "pending"}
+    asyncio.create_task(_run_chat_job(job_id, request))
+    return ChatJobStartResponse(job_id=job_id)
+
+
+@app.get("/chat/jobs/{job_id}")
+async def get_chat_job(job_id: str):
+    job = _CHAT_JOBS.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Unknown or expired job_id")
+    return job
 
 
 @app.post("/upload")
