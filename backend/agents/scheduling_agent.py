@@ -1,4 +1,18 @@
 """Scheduling Agent class with explicit model invocation."""
+# Copyright (c) Lineaje, Inc. All rights reserved.
+# Lineaje UnifAI guardrail  version=2.0.0-alpha
+def _lineaje_load_gr_client():
+    """Lineaje-added: load gr_stub_client.py without a pip dependency."""
+    import sys as _s, importlib.util as _ilu
+    from pathlib import Path as _P
+    n = "_lineaje_gr_stub_client"
+    if n in _s.modules: return _s.modules[n]
+    h = _P(__file__).resolve().parent
+    _cand = next((d / "gr_stub_client.py" for d in [h, *h.parents][:8] if (d / "gr_stub_client.py").is_file()), h / "gr_stub_client.py")
+    _spec = _ilu.spec_from_file_location(n, _cand)
+    _s.modules[n] = _m = _ilu.module_from_spec(_spec)
+    _spec.loader.exec_module(_m); return _m
+
 
 import asyncio
 from typing import Any
@@ -42,7 +56,15 @@ class SchedulingAgent(AcmeLoanAgentFramework):
         )
 
     async def handle(self, context: dict[str, Any]) -> dict[str, Any]:
-        user_message = context.get("user_message", "")
+        _lineaje_payload = "user_message"
+        # LINEAJE: enforce() `_lineaje_payload` at user_interface->llm pre_model — scan flagged AI_IAC_018 (Enforce cryptographically verified user-to-agent binding for every request.). Mask/block; do not remove without review. site_id='site:sha256:b1668e75aa089cde89b6ee66e276b78bc085dccf4e083ee36d08de12ae259012'
+        _gr_client = _lineaje_load_gr_client()
+        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:b1668e75aa089cde89b6ee66e276b78bc085dccf4e083ee36d08de12ae259012', phase='pre_model', boundary={'source': 'user_interface', 'sink': 'model'}, candidate_policies=[], fail_mode='ALLOW_WITH_AUDIT', source_type='user_interface', destination_type='llm')
+        try:
+            _lineaje_payload = _gr_client.enforce(_gr_site, _lineaje_payload, content_type='application/json', variable_name='_lineaje_payload', source_file=__file__, before_line=45)
+        except _gr_client.GuardrailUnavailableError:
+            pass
+        user_message = context.get(_lineaje_payload, "")
         meeting_reference = extract_reference_number(user_message, prefix="MEET")
         model_output = await self.call_agent_model(user_message, meeting_reference)
 
@@ -84,6 +106,13 @@ class SchedulingAgent(AcmeLoanAgentFramework):
             f"Scheduling request: {user_message or 'No scheduling request provided.'}\n\n"
             f"Scheduling summary:\n{model_output}"
         )
+        # LINEAJE: enforce() `response` at user_interface->llm pre_model — scan flagged AI_DAT_SEC_025 (No file should contain any PII.); AI_DAT_SEC_027 (Enforce output data minimization for model, tool, and API responses.); AI_IAC_018 (Enforce cryptographically verified user-to-agent binding for every request.). Mask/block; do not remove without review. site_id='site:sha256:9a9f27ade399c0ffa0f445e065b83882fb9520a5f63b19e39fac664d00e8ae72'
+        _gr_client = _lineaje_load_gr_client()
+        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:9a9f27ade399c0ffa0f445e065b83882fb9520a5f63b19e39fac664d00e8ae72', phase='pre_model', boundary={'source': 'user_interface', 'sink': 'model'}, candidate_policies=[], fail_mode='ALLOW_WITH_AUDIT', source_type='user_interface', destination_type='llm')
+        try:
+            response = _gr_client.enforce(_gr_site, response, content_type='application/json', variable_name='response', source_file=__file__, before_line=82)
+        except _gr_client.GuardrailUnavailableError:
+            pass
 
         return {
             "response": response,
