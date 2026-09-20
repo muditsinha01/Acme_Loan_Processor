@@ -1,4 +1,18 @@
 """Orchestrator Agent class with explicit model invocation."""
+# Copyright (c) Lineaje, Inc. All rights reserved.
+# Lineaje UnifAI guardrail  version=2.0.0-alpha
+def _lineaje_load_gr_client():
+    """Lineaje-added: load gr_stub_client.py without a pip dependency."""
+    import sys as _s, importlib.util as _ilu
+    from pathlib import Path as _P
+    n = "_lineaje_gr_stub_client"
+    if n in _s.modules: return _s.modules[n]
+    h = _P(__file__).resolve().parent
+    _cand = next((d / "gr_stub_client.py" for d in [h, *h.parents][:8] if (d / "gr_stub_client.py").is_file()), h / "gr_stub_client.py")
+    _spec = _ilu.spec_from_file_location(n, _cand)
+    _s.modules[n] = _m = _ilu.module_from_spec(_spec)
+    _spec.loader.exec_module(_m); return _m
+
 
 import logging
 from typing import Any
@@ -20,8 +34,8 @@ class OrchestratorAgent(AcmeLoanAgentFramework):
     AGENT_ID = "orchestrator_agent"
     AGENT_NAME = "Orchestrator Agent"
     VERSION = "1.0.0"
-    MODEL_NAME = "claude-sonnet-4"
-    BEDROCK_MODEL_ID = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+    MODEL_NAME = "deepseek/deepseek-r1"
+    BEDROCK_MODEL_ID = "us.deepseek.deepseek-r1:0"
     DESCRIPTION = "Routes work between the specialized agents and shares the conversation context."
     MCP_SERVERS = ["Slack"]
     GUARDRAILS = {
@@ -64,8 +78,16 @@ class OrchestratorAgent(AcmeLoanAgentFramework):
         forwarded_context["internal_call_chain"] = [self.AGENT_NAME, selected_agent_name]
         forwarded_context["internal_hop_token"] = "shared-orchestrator-hop-token"
 
+        _lineaje_payload = "Orchestrator Agent routing request"
+        # LINEAJE: enforce() `_lineaje_payload` at agent->log log_emit — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.); AI_DAT_SEC_027 (Enforce output data minimization for model, tool, and API responses.). Mask/block; do not remove without review. site_id='site:sha256:2f989c04e85ce464a8e3c6400b0a5a29a71060cd43bf9f475a3954f132ab04a0'
+        _gr_client = _lineaje_load_gr_client()
+        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:2f989c04e85ce464a8e3c6400b0a5a29a71060cd43bf9f475a3954f132ab04a0', phase='log_emit', boundary={'source': 'log', 'sink': 'log'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_010', 'guardrail_id': 'Mask PII in Logs', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='log')
+        try:
+            _lineaje_payload = await __import__('asyncio').to_thread(lambda: _gr_client.enforce(_gr_site, _lineaje_payload, content_type='application/json'))
+        except _gr_client.GuardrailUnavailableError:
+            pass
         logger.info(
-            "Orchestrator Agent routing request",
+            _lineaje_payload,
             extra={
                 "selected_agent": selected_agent_name,
                 "internal_call_chain": forwarded_context["internal_call_chain"],
@@ -79,6 +101,13 @@ class OrchestratorAgent(AcmeLoanAgentFramework):
         response = await selected_agent.handle(forwarded_context)
         response["orchestrator"] = self.AGENT_NAME
         response["routing_note"] = routing_note
+        # LINEAJE: enforce() `response` at agent->user_interface data_egress — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.); AI_DAT_SEC_027 (Enforce output data minimization for model, tool, and API responses.). Mask/block; do not remove without review. site_id='site:sha256:728d0c5aa3c4919ecd2548d7268f00f18efd85878270cc125539b0b1d7a5762b'
+        _gr_client = _lineaje_load_gr_client()
+        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:728d0c5aa3c4919ecd2548d7268f00f18efd85878270cc125539b0b1d7a5762b', phase='data_egress', boundary={'source': 'agent_message', 'sink': 'user_interface'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_012', 'guardrail_id': 'Mask PII on UI', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='user_interface')
+        try:
+            response = _gr_client.enforce(_gr_site, response, content_type='text/plain')
+        except _gr_client.GuardrailUnavailableError:
+            pass
         return response
 
     def select_agent(self, user_message: str, file_contents: list[dict[str, Any]]) -> AcmeLoanAgentFramework:
