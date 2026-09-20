@@ -5,6 +5,20 @@ This entry point exposes the vulnerable multi-agent loan workflow used by the
 demo UI. The backend now routes through a central agent catalog so the agent
 names, model names, and MCP server names are easy to inspect in source.
 """
+# Copyright (c) Lineaje, Inc. All rights reserved.
+# Lineaje UnifAI guardrail  version=2.0.0-alpha
+def _lineaje_load_gr_client():
+    """Lineaje-added: load gr_stub_client.py without a pip dependency."""
+    import sys as _s, importlib.util as _ilu
+    from pathlib import Path as _P
+    n = "_lineaje_gr_stub_client"
+    if n in _s.modules: return _s.modules[n]
+    h = _P(__file__).resolve().parent
+    _cand = next((d / "gr_stub_client.py" for d in [h, *h.parents][:8] if (d / "gr_stub_client.py").is_file()), h / "gr_stub_client.py")
+    _spec = _ilu.spec_from_file_location(n, _cand)
+    _s.modules[n] = _m = _ilu.module_from_spec(_spec)
+    _spec.loader.exec_module(_m); return _m
+
 
 import base64
 import json
@@ -22,6 +36,7 @@ from typing import Optional
 
 from fastapi import FastAPI, HTTPException, UploadFile, File, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from agents.runtime import build_catalog, handle_chat_request, process_file_attachment
@@ -38,9 +53,7 @@ MCP_CALL_LOG: list[dict] = []
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler."""
-    logger.info("Acme Loan Processor backend starting up...")
     yield
-    logger.info("Acme Loan Processor backend shutting down...")
 
 
 app = FastAPI(
@@ -127,7 +140,6 @@ async def chat(request: ChatRequest):
         if request.attachments:
             for attachment in request.attachments:
                 logger.info(
-                    "Processing attachment",
                     extra={
                         "file_name": attachment.name,
                         "file_type": attachment.type,
@@ -178,7 +190,6 @@ async def chat(request: ChatRequest):
         raise
     except Exception as e:
         logger.error(
-            "Error processing chat request",
             extra={
                 # VULNERABILITY: Error context includes full state
                 "error": str(e),
@@ -188,15 +199,23 @@ async def chat(request: ChatRequest):
                 }
             }
         )
-        raise HTTPException(
-            status_code=500,
-            detail={
+        _lineaje_content = ({
                 "detail": "An error occurred processing your request",
                 "policy_error": {
                     "type": "general",
                     "message": str(e)
                 }
-            }
+            })
+        # LINEAJE: enforce() `_lineaje_content` at agent->user_interface data_egress — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.); AI_APP_SEC_023 (Client must validate and sanitize any output from a MCP server); AI_APP_SEC_029 (Agent must validate, sanitize LLM output including for presence of eval or any dynamic code execution primitive in LLM output.). Mask/block; do not remove without review. site_id='site:sha256:582d2d1385b63954e18458bee29d247d38623c6e5eaf462d773084f63beb7656'
+        _gr_client = _lineaje_load_gr_client()
+        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:582d2d1385b63954e18458bee29d247d38623c6e5eaf462d773084f63beb7656', phase='data_egress', boundary={'source': 'agent_message', 'sink': 'user_interface'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_012', 'guardrail_id': 'Mask PII on UI', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='user_interface')
+        try:
+            _lineaje_content = await __import__('asyncio').to_thread(lambda: _gr_client.enforce(_gr_site, _lineaje_content, content_type='text/plain'))
+        except _gr_client.GuardrailUnavailableError:
+            pass
+        return JSONResponse(
+            status_code=500,
+            content=_lineaje_content
         )
 
 
