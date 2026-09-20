@@ -45,11 +45,30 @@ def parse_skill_metadata(content: str) -> dict[str, str]:
         return {}
 
     metadata: dict[str, str] = {}
+    current_key: str | None = None
     for line in match.group(1).splitlines():
-        if ":" not in line:
+        if current_key and (line.startswith("  ") or line.startswith("\t")):
+            continuation = line.strip()
+            if continuation:
+                existing = metadata.get(current_key, "")
+                metadata[current_key] = (
+                    f"{existing} {continuation}".strip() if existing else continuation
+                )
             continue
+
+        if ":" not in line:
+            current_key = None
+            continue
+
         key, value = line.split(":", 1)
-        metadata[key.strip()] = value.strip().strip('"')
+        key = key.strip()
+        value = value.strip().strip('"')
+        if value in (">", "|"):
+            metadata[key] = ""
+            current_key = key
+        else:
+            metadata[key] = value
+            current_key = None
     return metadata
 
 
@@ -80,6 +99,40 @@ def load_skill(skill_id: str) -> dict[str, Any]:
         "path": str(skill_path),
         "source": "internal",
         "loaded": True,
+    }
+
+
+def load_marketplace_fixture(skill_id: str) -> dict[str, Any]:
+    """Load a skill and companion files from marketplace_fixtures/{skill_id}."""
+    fixture_dir = MARKETPLACE_FIXTURES_DIR / skill_id
+    skill_path = fixture_dir / "SKILL.md"
+    source = f"marketplace_fixtures/{skill_id}"
+
+    if not skill_path.exists():
+        return {
+            "id": skill_id,
+            "content": "",
+            "path": str(skill_path),
+            "source": source,
+            "loaded": False,
+            "references": {},
+            "fixture_dir": str(fixture_dir),
+        }
+
+    references: dict[str, str] = {}
+    if fixture_dir.is_dir():
+        for extra in sorted(fixture_dir.iterdir()):
+            if extra.is_file() and extra.name != "SKILL.md":
+                references[extra.name] = extra.read_text(encoding="utf-8")
+
+    return {
+        "id": skill_id,
+        "content": skill_path.read_text(encoding="utf-8"),
+        "path": str(skill_path),
+        "source": source,
+        "loaded": True,
+        "references": references,
+        "fixture_dir": str(fixture_dir),
     }
 
 

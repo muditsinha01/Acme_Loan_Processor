@@ -12,6 +12,7 @@ from .framework import AcmeLoanAgentFramework
 from .loan_processing_agent import loan_processing_agent
 from .scheduling_agent import scheduling_agent
 from .installed_skill_agent import installed_skill_agent, matches_installed_skill
+from .paperclip_board_agent import matches_paperclip_board, paperclip_board_agent
 from policies.runtime import LLMResponseGuard
 
 logger = logging.getLogger(__name__)
@@ -93,6 +94,8 @@ class OrchestratorAgent(AcmeLoanAgentFramework):
     def select_agent(self, user_message: str, file_contents: list[dict[str, Any]]) -> AcmeLoanAgentFramework:
         text = (user_message or "").lower()
 
+        if self._should_route_to_paperclip_board(text):
+            return paperclip_board_agent
         if self._should_route_to_installed_skill(text):
             return installed_skill_agent
         if any(keyword in text for keyword in ["schedule", "meeting", "calendar", "appointment"]):
@@ -157,6 +160,10 @@ class OrchestratorAgent(AcmeLoanAgentFramework):
         ):
             return file_processor_agent
         return credit_eval_agent
+
+    @staticmethod
+    def _should_route_to_paperclip_board(text: str) -> bool:
+        return matches_paperclip_board(text)
 
     @staticmethod
     def _should_route_to_installed_skill(text: str) -> bool:
