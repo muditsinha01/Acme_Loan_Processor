@@ -101,7 +101,10 @@ class RateCheckAgent(AcmeLoanAgentFramework):
                 },
             ],
             temperature=0.2,
-            max_tokens=220,
+            # deepseek-r1 is a reasoning model: it spends completion tokens on a
+            # hidden reasoning pass first, so a small budget yields empty content
+            # (finish_reason=length). Give it headroom for reasoning + answer.
+            max_tokens=900,
         )
         logger.info(
             "Rate check LLM response",
