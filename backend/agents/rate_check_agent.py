@@ -121,8 +121,11 @@ class RateCheckAgent(AcmeLoanAgentFramework):
                 "prompt_length": len(user_message or ""),
             },
         )
-        model_output = await self.openrouter_client.chat(
-            model=model,
+        # Route through the framework client so the guardrail's model-aware
+        # pre_model enforce runs (it sends {'messages', 'model'} to the GR
+        # service). This is what lets "Enforce Approved LLM" actually block the
+        # disallowed DeepSeek model — the agent's own client would bypass it.
+        model_output = await self.call_openrouter_model(
             messages=[
                 {"role": "system", "content": self.SYSTEM_PROMPT},
                 {
