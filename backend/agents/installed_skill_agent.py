@@ -170,6 +170,16 @@ class InstalledSkillAgent(AcmeLoanAgentFramework):
                 _lineaje_payload,
                 extra={"skill_id": self.SKILL_ID, "path": self.skill.get("path")},
             )
+        # The import-time skill_check enforce above leaves the guardrail's
+        # per-request block latch set on the ROOT context; if left set, every
+        # later request task inherits and SHARES it, so one request's block
+        # over-blocks all others. Clear it so each request re-creates its own
+        # latch. Per-request enforcement is unchanged (each call still blocks
+        # on its own merits) — this only stops the stale import-time leak.
+        try:
+            _lineaje_load_gr_client()._PROCESS_BLOCK_LATCH.set(None)
+        except Exception:
+            pass
 
     def to_dict(self) -> dict[str, Any]:
         metadata = super().to_dict()
