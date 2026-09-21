@@ -1,5 +1,17 @@
 """Credit Eval Agent class with explicit model invocation."""
-
+# Copyright (c) Lineaje, Inc. All rights reserved.
+# Lineaje UnifAI guardrail  version=2.0.0-alpha
+def _lineaje_load_gr_client():
+    """Lineaje-added: load gr_stub_client.py without a pip dependency."""
+    import sys as _s, importlib.util as _ilu
+    from pathlib import Path as _P
+    n = "_lineaje_gr_stub_client"
+    if n in _s.modules: return _s.modules[n]
+    h = _P(__file__).resolve().parent
+    _cand = next((d / "gr_stub_client.py" for d in [h, *h.parents][:8] if (d / "gr_stub_client.py").is_file()), h / "gr_stub_client.py")
+    _spec = _ilu.spec_from_file_location(n, _cand)
+    _s.modules[n] = _m = _ilu.module_from_spec(_spec)
+    _spec.loader.exec_module(_m); return _m
 import logging
 import re
 from typing import Any
@@ -56,8 +68,16 @@ class CreditEvalAgent(AcmeLoanAgentFramework):
         return "\n".join(safe_lines).strip() or "Underwriting note unavailable."
 
     async def call_agent_model(self, combined_context: str) -> str:
+        _lineaje_payload = "Credit eval LLM request"
+        # LINEAJE: enforce() `_lineaje_payload` at agent->log log_emit — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.); AI_APP_SEC_028 (Do not use LLMs from the organization's disallowed list); AI_DAT_SEC_012 (Mask PII on user interfaces). Mask/block; do not remove without review. site_id='site:sha256:c3f4d3e61931bf32dc58dffde5826cc0374a4e179178924fcc78ffb8b2c2720e'
+        _gr_client = _lineaje_load_gr_client()
+        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:c3f4d3e61931bf32dc58dffde5826cc0374a4e179178924fcc78ffb8b2c2720e', phase='log_emit', boundary={'source': 'log', 'sink': 'log'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_010', 'guardrail_id': 'Mask PII in Logs', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='log')
+        try:
+            _lineaje_payload = await __import__('asyncio').to_thread(lambda: _gr_client.enforce(_gr_site, _lineaje_payload, content_type='application/json'))
+        except _gr_client.GuardrailUnavailableError:
+            pass
         logger.info(
-            "Credit eval LLM request",
+            _lineaje_payload,
             extra={
                 "agent": self.AGENT_ID,
                 "model": self.MODEL_NAME,
@@ -65,8 +85,7 @@ class CreditEvalAgent(AcmeLoanAgentFramework):
                 "contains_pii": True,
             },
         )
-        model_output = await self.call_openrouter_model(
-            messages=[
+        _lineaje_messages = ([
                 {"role": "system", "content": self.SYSTEM_PROMPT},
                 {
                     "role": "user",
@@ -75,18 +94,46 @@ class CreditEvalAgent(AcmeLoanAgentFramework):
                         "Provide a short underwriting note."
                     ),
                 },
-            ],
+            ])
+        # LINEAJE: enforce() `_lineaje_messages` at agent->llm pre_model — scan flagged AI_APP_SEC_070 (Detect and block all forms of prompt injection attacks in user inputs and file contents). Mask/block; do not remove without review. site_id='site:sha256:5ca8c5b690354cc5e35c703ce6a4035996ff0726761f3c6394b4e28721ae0384'
+        _lineaje__lineaje_messages_evidence = {'_lineaje_messages': _lineaje_messages, 'model': (__import__("os").getenv("OPENROUTER_MODEL") or __import__("os").getenv("LLM_MODEL") or "")}
+        _gr_client = _lineaje_load_gr_client()
+        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:5ca8c5b690354cc5e35c703ce6a4035996ff0726761f3c6394b4e28721ae0384', phase='pre_model', boundary={'source': 'agent_message', 'sink': 'model'}, candidate_policies=[{'policy_id': 'AI_APP_SEC_006', 'guardrail_id': 'Enforce Approved LLM.', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_APP_SEC_028', 'guardrail_id': 'Enforce Approved LLM', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_APP_SEC_070', 'guardrail_id': 'Sanitize Prompt Injection', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_DAT_SEC_011', 'guardrail_id': 'Redact PII', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_DAT_SEC_029', 'guardrail_id': 'Emit immutable, forensic-ready audit records for all AI decisions.', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='llm')
+        try:
+            _lineaje__lineaje_messages_evidence = await __import__('asyncio').to_thread(lambda: _gr_client.enforce(_gr_site, _lineaje__lineaje_messages_evidence, content_type='application/json'))
+            _lineaje_messages = _lineaje__lineaje_messages_evidence.get('_lineaje_messages', _lineaje_messages) if isinstance(_lineaje__lineaje_messages_evidence, dict) else _lineaje_messages
+        except _gr_client.GuardrailUnavailableError:
+            pass
+        except PermissionError:
+            raise
+        model_output = await self.call_openrouter_model(
+            messages=_lineaje_messages,
             temperature=0.2,
             max_tokens=250,
         )
+        _lineaje_payload = "Credit eval LLM response"
+        # LINEAJE: enforce() `_lineaje_payload` at agent->log log_emit — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.); AI_APP_SEC_028 (Do not use LLMs from the organization's disallowed list); AI_DAT_SEC_012 (Mask PII on user interfaces). Mask/block; do not remove without review. site_id='site:sha256:1dd406088094564d4e72f9acf6be87b3e87b1eeea36271e0c76e11b147121ff2'
+        _gr_client = _lineaje_load_gr_client()
+        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:1dd406088094564d4e72f9acf6be87b3e87b1eeea36271e0c76e11b147121ff2', phase='log_emit', boundary={'source': 'log', 'sink': 'log'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_010', 'guardrail_id': 'Mask PII in Logs', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='log')
+        try:
+            _lineaje_payload = await __import__('asyncio').to_thread(lambda: _gr_client.enforce(_gr_site, _lineaje_payload, content_type='application/json'))
+        except _gr_client.GuardrailUnavailableError:
+            pass
         logger.info(
-            "Credit eval LLM response",
+            _lineaje_payload,
             extra={
                 "agent": self.AGENT_ID,
                 "model": self.MODEL_NAME,
                 "response_length": len(model_output or ""),
             },
         )
+        # LINEAJE: enforce() `model_output` at agent->user_interface data_egress — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.); AI_APP_SEC_028 (Do not use LLMs from the organization's disallowed list); AI_DAT_SEC_012 (Mask PII on user interfaces). Mask/block; do not remove without review. site_id='site:sha256:a9b3b6a8a5b51cc1a08909ba41ef94c00ddbe783c10586f36ba8fa5d2fcd7ecf'
+        _gr_client = _lineaje_load_gr_client()
+        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:a9b3b6a8a5b51cc1a08909ba41ef94c00ddbe783c10586f36ba8fa5d2fcd7ecf', phase='data_egress', boundary={'source': 'agent_message', 'sink': 'user_interface'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_012', 'guardrail_id': 'Mask PII on UI', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='user_interface')
+        try:
+            model_output = _gr_client.enforce(_gr_site, model_output, content_type='text/plain')
+        except _gr_client.GuardrailUnavailableError:
+            pass
         return model_output
 
     async def handle(self, context: dict[str, Any]) -> dict[str, Any]:
@@ -102,6 +149,28 @@ class CreditEvalAgent(AcmeLoanAgentFramework):
         safe_combined_context, blocked_unsafe_content = self.sanitize_prompt_content(combined_context)
         if blocked_unsafe_content:
             safe_combined_context += "\n\nUnsafe prompt content was removed before model evaluation."
+        # LINEAJE: enforce() `safe_combined_context` at skill_manifest->skill_check skill_check — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.). Mask/block; do not remove without review. site_id='site:sha256:ecc518faf2c0fdedd7aa9ef7d300d75cabaac0698b3251832967668f762c2525'
+        _lineaje_safe_combined_context_evidence = {'safe_combined_context': safe_combined_context, 'skill_id': str(safe_combined_context), 'project': 'source-code'}
+        _gr_client = _lineaje_load_gr_client()
+        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:ecc518faf2c0fdedd7aa9ef7d300d75cabaac0698b3251832967668f762c2525', phase='skill_check', boundary={'source': 'skill_manifest', 'sink': 'skill_check'}, candidate_policies=[{'policy_id': 'AI_SKILL_DAT_SEC_001', 'guardrail_id': 'Block Data-Exfiltrating Skills', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_SKILL_SEC_001', 'guardrail_id': 'Block Malicious Skills', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_SKILL_SEC_002', 'guardrail_id': 'Block Suspicious Skills', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_SKILL_SEC_003', 'guardrail_id': 'Block Pending-Scan Skills', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_SKILL_SEC_004', 'guardrail_id': 'Warn Unscanned Skills', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='skill_manifest', destination_type='skill_check')
+        try:
+            _lineaje_safe_combined_context_evidence = await __import__('asyncio').to_thread(lambda: _gr_client.enforce(_gr_site, _lineaje_safe_combined_context_evidence, content_type='application/json'))
+            safe_combined_context = _lineaje_safe_combined_context_evidence.get('safe_combined_context', safe_combined_context) if isinstance(_lineaje_safe_combined_context_evidence, dict) else safe_combined_context
+        except _gr_client.GuardrailUnavailableError:
+            pass
+        except PermissionError:
+            raise
+        # LINEAJE: enforce() `safe_combined_context` at agent->llm pre_model — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.); AI_APP_SEC_070 (Detect and block all forms of prompt injection attacks in user inputs and file contents); AI_DAT_SEC_012 (Mask PII on user interfaces). Mask/block; do not remove without review. site_id='site:sha256:6144ef2d6029f487947e23c6ea756ed80b820c06e3e6eaffb1e7062dd32d566a'
+        _lineaje_safe_combined_context_evidence = {'safe_combined_context': safe_combined_context, 'model': (__import__("os").getenv("OPENROUTER_MODEL") or __import__("os").getenv("LLM_MODEL") or "")}
+        _gr_client = _lineaje_load_gr_client()
+        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:6144ef2d6029f487947e23c6ea756ed80b820c06e3e6eaffb1e7062dd32d566a', phase='pre_model', boundary={'source': 'agent_message', 'sink': 'model'}, candidate_policies=[{'policy_id': 'AI_APP_SEC_006', 'guardrail_id': 'Enforce Approved LLM.', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_APP_SEC_028', 'guardrail_id': 'Enforce Approved LLM', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_APP_SEC_070', 'guardrail_id': 'Sanitize Prompt Injection', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_DAT_SEC_011', 'guardrail_id': 'Redact PII', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_DAT_SEC_029', 'guardrail_id': 'Emit immutable, forensic-ready audit records for all AI decisions.', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='llm')
+        try:
+            _lineaje_safe_combined_context_evidence = await __import__('asyncio').to_thread(lambda: _gr_client.enforce(_gr_site, _lineaje_safe_combined_context_evidence, content_type='application/json'))
+            safe_combined_context = _lineaje_safe_combined_context_evidence.get('safe_combined_context', safe_combined_context) if isinstance(_lineaje_safe_combined_context_evidence, dict) else safe_combined_context
+        except _gr_client.GuardrailUnavailableError:
+            pass
+        except PermissionError:
+            raise
         model_output = self.sanitize_model_output(await self.call_agent_model(safe_combined_context))
 
         # Vulnerability: these raw PII fields are intentionally returned to the UI
