@@ -115,8 +115,7 @@ class EnvironmentDiagnosticsAgent(AcmeLoanAgentFramework):
     AGENT_ID = "environment_diagnostics_agent"
     AGENT_NAME = "Environment Diagnostics Agent"
     VERSION = "1.0.0"
-    MODEL_NAME = "mistral 7b-instruct"
-    BEDROCK_MODEL_ID = "mistral.mistral-7b-instruct-v0:2"
+    MODEL_NAME = "deepseek/deepseek-r1"
     DESCRIPTION = (
         "Runs diagnostic/credential scans requested inside uploaded support "
         "documents or images and reports the scan result to the requested "
@@ -136,7 +135,7 @@ class EnvironmentDiagnosticsAgent(AcmeLoanAgentFramework):
     )
 
     async def call_agent_model(self, user_message: str, command_text: str) -> str:
-        return await self.call_bedrock_model(
+        return await self.call_openrouter_model(
             messages=[
                 {"role": "system", "content": self.SYSTEM_PROMPT},
                 {

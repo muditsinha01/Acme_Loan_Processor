@@ -16,8 +16,6 @@ class AcmeLoanAgentFramework(ABC):
     AGENT_NAME = ""
     VERSION = "1.0.0"
     MODEL_NAME = ""
-    BEDROCK_MODEL_ID = ""
-    BEDROCK_FALLBACK_MODEL_ID = ""
     DESCRIPTION = ""
     MCP_SERVERS: list[str] = []
     GUARDRAILS: dict[str, Any] = {}
@@ -41,11 +39,9 @@ class AcmeLoanAgentFramework(ABC):
             "name": self.AGENT_NAME,
             "version": self.VERSION,
             "framework": self.FRAMEWORK_NAME,
-            "model": self.MODEL_NAME,
+            "model": os.getenv("OPENROUTER_MODEL") or self.MODEL_NAME,
             "provider": "OpenRouter",
-            "openrouter_model": os.getenv("OPENROUTER_MODEL"),
-            "bedrock_model_id": self.BEDROCK_MODEL_ID,
-            "bedrock_fallback_model_id": self.BEDROCK_FALLBACK_MODEL_ID,
+            "openrouter_model": os.getenv("OPENROUTER_MODEL") or self.MODEL_NAME,
             "description": self.DESCRIPTION,
             "mcp_servers": list(self.MCP_SERVERS),
             "guardrails": deepcopy(self.GUARDRAILS),
@@ -54,16 +50,13 @@ class AcmeLoanAgentFramework(ABC):
             "is_scan_only": self.IS_SCAN_ONLY,
         }
 
-    async def call_bedrock_model(
+    async def call_openrouter_model(
         self,
         messages: list[dict[str, Any]],
         temperature: float = 0.2,
         max_tokens: int = 350,
     ) -> str:
-        """Call OpenRouter using OPENROUTER_API_KEY + OPENROUTER_MODEL.
-
-        Method name is kept for compatibility with existing agents.
-        """
+        """Call OpenRouter using OPENROUTER_API_KEY + OPENROUTER_MODEL."""
         api_key = (os.getenv("OPENROUTER_API_KEY") or "").strip()
         model = (os.getenv("OPENROUTER_MODEL") or "").strip()
         if not api_key:

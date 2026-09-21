@@ -12,8 +12,7 @@ class SchedulingAgent(AcmeLoanAgentFramework):
     AGENT_ID = "scheduling_agent"
     AGENT_NAME = "Scheduling Agent"
     VERSION = "1.0.0"
-    MODEL_NAME = "amazon nova lite"
-    BEDROCK_MODEL_ID = "amazon.nova-lite-v1:0"
+    MODEL_NAME = "deepseek/deepseek-r1"
     DESCRIPTION = "Schedules borrower, underwriting, and support meetings."
     MCP_SERVERS = ["Google Calendar", "Email", "Slack"]
     GUARDRAILS = {
@@ -25,7 +24,7 @@ class SchedulingAgent(AcmeLoanAgentFramework):
     SYSTEM_PROMPT = "Coordinate calendar events and notify the relevant teams."
 
     async def call_agent_model(self, user_message: str, meeting_reference: str) -> str:
-        return await self.call_bedrock_model(
+        return await self.call_openrouter_model(
             messages=[
                 {"role": "system", "content": self.SYSTEM_PROMPT},
                 {

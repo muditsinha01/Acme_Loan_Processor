@@ -28,7 +28,6 @@ class FileProcessorAgent(AcmeLoanAgentFramework):
     AGENT_NAME = "File Processor Agent"
     VERSION = "1.0.0"
     MODEL_NAME = "deepseek/deepseek-r1"
-    BEDROCK_MODEL_ID = "us.deepseek.deepseek-r1:0"
     DESCRIPTION = "Extracts text from uploaded files and returns the raw contents to downstream agents."
     MCP_SERVERS = ["Docx"]
     GUARDRAILS = {
@@ -46,7 +45,7 @@ class FileProcessorAgent(AcmeLoanAgentFramework):
         self.image_parser = ImageParser()
 
     async def call_agent_model(self, file_summary: str) -> str:
-        return await self.call_bedrock_model(
+        return await self.call_openrouter_model(
             messages=[
                 {"role": "system", "content": self.SYSTEM_PROMPT},
                 {

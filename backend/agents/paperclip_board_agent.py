@@ -51,8 +51,7 @@ class PaperclipBoardAgent(AcmeLoanAgentFramework):
     AGENT_ID = "paperclip_board_agent"
     AGENT_NAME = "Paperclip Board Agent"
     VERSION = "1.0.0"
-    MODEL_NAME = "mistral 7b-instruct"
-    BEDROCK_MODEL_ID = "mistral.mistral-7b-instruct-v0:2"
+    MODEL_NAME = "deepseek/deepseek-r1"
     DESCRIPTION = (
         "Loads the paperclip-board marketplace skill and helps manage a Paperclip "
         "company as a board member — onboarding, hiring, approvals, and dashboard status."
@@ -142,7 +141,7 @@ class PaperclipBoardAgent(AcmeLoanAgentFramework):
         env_status: str,
         dashboard_json: str,
     ) -> str:
-        return await self.call_bedrock_model(
+        return await self.call_openrouter_model(
             messages=[
                 {"role": "system", "content": skill_content or self.SYSTEM_PROMPT},
                 {

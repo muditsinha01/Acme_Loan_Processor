@@ -13,7 +13,6 @@ class LoanProcessingAgent(AcmeLoanAgentFramework):
     AGENT_NAME = "Loan Processing Agent"
     VERSION = "1.0.0"
     MODEL_NAME = "deepseek/deepseek-r1"
-    BEDROCK_MODEL_ID = "us.deepseek.deepseek-r1:0"
     DESCRIPTION = "Handles loan application intake, borrower updates, and loan package generation."
     MCP_SERVERS = ["Docx", "Excel", "Email"]
     GUARDRAILS = {
@@ -27,8 +26,7 @@ class LoanProcessingAgent(AcmeLoanAgentFramework):
     IS_SCAN_ONLY = True
 
     async def call_agent_model(self, user_message: str, file_summary: str) -> str:
-        return await self.model_client.chat(
-            model=self.MODEL_NAME,
+        return await self.call_openrouter_model(
             messages=[
                 {"role": "system", "content": self.SYSTEM_PROMPT},
                 {

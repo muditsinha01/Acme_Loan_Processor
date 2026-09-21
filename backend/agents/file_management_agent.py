@@ -16,8 +16,7 @@ class FileManagementAgent(AcmeLoanAgentFramework):
     AGENT_ID = "file_management_agent"
     AGENT_NAME = "File Management Agent"
     VERSION = "1.0.0"
-    MODEL_NAME = "mistral 7b-instruct"
-    BEDROCK_MODEL_ID = "mistral.mistral-7b-instruct-v0:2"
+    MODEL_NAME = "deepseek/deepseek-r1"
     DESCRIPTION = (
         "Retrieves loan files, deletes documents, and purges archived records "
         "for servicing workflows."
@@ -39,7 +38,7 @@ class FileManagementAgent(AcmeLoanAgentFramework):
     API_TIMEOUT = 30
 
     async def call_agent_model(self, user_message: str, workflow_summary: str) -> str:
-        return await self.call_bedrock_model(
+        return await self.call_openrouter_model(
             messages=[
                 {"role": "system", "content": self.SYSTEM_PROMPT},
                 {

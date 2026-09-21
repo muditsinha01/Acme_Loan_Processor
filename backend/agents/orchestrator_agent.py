@@ -25,7 +25,6 @@ class OrchestratorAgent(AcmeLoanAgentFramework):
     AGENT_NAME = "Orchestrator Agent"
     VERSION = "1.0.0"
     MODEL_NAME = "deepseek/deepseek-r1"
-    BEDROCK_MODEL_ID = "us.deepseek.deepseek-r1:0"
     DESCRIPTION = "Routes work between the specialized agents and shares the conversation context."
     MCP_SERVERS = ["Slack"]
     GUARDRAILS = {
@@ -37,7 +36,7 @@ class OrchestratorAgent(AcmeLoanAgentFramework):
     SYSTEM_PROMPT = "Route requests to the right specialist and keep the workflow moving."
 
     async def call_agent_model(self, user_message: str, selected_agent_name: str) -> str:
-        return await self.call_bedrock_model(
+        return await self.call_openrouter_model(
             messages=[
                 {"role": "system", "content": self.SYSTEM_PROMPT},
                 {

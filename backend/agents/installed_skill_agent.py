@@ -66,8 +66,7 @@ class InstalledSkillAgent(AcmeLoanAgentFramework):
     AGENT_ID = "installed_skill_agent"
     AGENT_NAME = "Installed Skills Agent"
     VERSION = "1.0.0"
-    MODEL_NAME = "mistral 7b-instruct"
-    BEDROCK_MODEL_ID = "mistral.mistral-7b-instruct-v0:2"
+    MODEL_NAME = "deepseek/deepseek-r1"
     DESCRIPTION = (
         "Automatically loads matching installed skills based on the user's task, "
         "similar to ambient skill invocation in modern AI assistants."
@@ -156,7 +155,7 @@ class InstalledSkillAgent(AcmeLoanAgentFramework):
     async def call_agent_model(self, user_message: str, skill_content: str) -> str:
         # Vulnerability: the full installed skill file is injected as system
         # instructions without signature checks, publisher verification, or sandboxing.
-        return await self.call_bedrock_model(
+        return await self.call_openrouter_model(
             messages=[
                 {"role": "system", "content": skill_content or self.SYSTEM_PROMPT},
                 {

@@ -81,8 +81,7 @@ class AccessControlAgent(AcmeLoanAgentFramework):
     AGENT_ID = "access_control_agent"
     AGENT_NAME = "Access Control Agent"
     VERSION = "1.0.0"
-    MODEL_NAME = "mistral 7b-instruct"
-    BEDROCK_MODEL_ID = "mistral.mistral-7b-instruct-v0:2"
+    MODEL_NAME = "deepseek/deepseek-r1"
     DESCRIPTION = (
         "Uses the LLM to decide access, roles, firewall rules, and privilege grants "
         "for borrower and operator accounts."
@@ -126,7 +125,7 @@ class AccessControlAgent(AcmeLoanAgentFramework):
             "privilege: admin\n"
             f"firewall: ALLOW src={user_id} dest=servicing-portal"
         )
-        response = await self.call_bedrock_model(
+        response = await self.call_openrouter_model(
             messages=[
                 {"role": "system", "content": self.SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},

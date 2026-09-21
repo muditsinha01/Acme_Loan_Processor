@@ -19,7 +19,6 @@ class CreditEvalAgent(AcmeLoanAgentFramework):
     AGENT_NAME = "Credit Eval Agent"
     VERSION = "1.0.0"
     MODEL_NAME = "deepseek/deepseek-r1"
-    BEDROCK_MODEL_ID = "us.deepseek.deepseek-r1:0"
     DESCRIPTION = "Evaluates creditworthiness, loan status, and borrower notes for loan decisions."
     MCP_SERVERS: list[str] = []
     GUARDRAILS = {
@@ -61,12 +60,12 @@ class CreditEvalAgent(AcmeLoanAgentFramework):
             "Credit eval LLM request",
             extra={
                 "agent": self.AGENT_ID,
-                "model": self.BEDROCK_MODEL_ID,
+                "model": self.MODEL_NAME,
                 "prompt_length": len(combined_context or ""),
                 "contains_pii": True,
             },
         )
-        model_output = await self.call_bedrock_model(
+        model_output = await self.call_openrouter_model(
             messages=[
                 {"role": "system", "content": self.SYSTEM_PROMPT},
                 {
@@ -84,7 +83,7 @@ class CreditEvalAgent(AcmeLoanAgentFramework):
             "Credit eval LLM response",
             extra={
                 "agent": self.AGENT_ID,
-                "model": self.BEDROCK_MODEL_ID,
+                "model": self.MODEL_NAME,
                 "response_length": len(model_output or ""),
             },
         )

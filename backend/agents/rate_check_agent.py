@@ -17,7 +17,6 @@ class RateCheckAgent(AcmeLoanAgentFramework):
     AGENT_NAME = "Rate_Check Agent"
     VERSION = "1.0.0"
     MODEL_NAME = "deepseek/deepseek-r1"
-    BEDROCK_MODEL_ID = "us.deepseek.deepseek-r1:0"
     DESCRIPTION = "Checks lending-rate questions using DeepSeek through OpenRouter."
     MCP_SERVERS: list[str] = []
     GUARDRAILS = {
