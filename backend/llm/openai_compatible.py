@@ -22,11 +22,19 @@ def _lineaje_load_gr_client():
 import asyncio
 import logging
 import os
+import time
 from typing import Any, Optional
 
 import requests
 
 logger = logging.getLogger(__name__)
+
+# Retry transient upstream failures (5xx / gateway timeouts / connection
+# resets). meta-llama/llama-4-scout on OpenRouter occasionally returns a 504
+# Gateway Timeout; a couple of quick retries smooth those over without
+# changing the async job-polling flow.
+_MAX_ATTEMPTS = 3
+_RETRY_BACKOFF_SEC = 1.5
 
 
 class OpenAICompatibleClient:
@@ -64,38 +72,68 @@ class OpenAICompatibleClient:
             headers["Authorization"] = f"Bearer {self.api_key}"
 
         def _post() -> str:
-            try:
-                response = requests.post(
-                    f"{self.base_url}/chat/completions",
-                    json=payload,
-                    headers=headers,
-                    timeout=20,
-                )
-                response.raise_for_status()
-                data = response.json()
-                choices = data.get("choices", [])
-                if choices:
-                    message = choices[0].get("message", {})
-                    content = message.get("content", "")
-                    if isinstance(content, str):
-                        return content.strip()
-                return f"Model API returned no content for model {model}."
-            except requests.RequestException as exc:
-                _lineaje_payload = "Model gateway request failed"
-                # LINEAJE: enforce() `_lineaje_payload` at agent->log log_emit — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.); AI_APP_SEC_028 (Do not use LLMs from the organization's disallowed list). Mask/block; do not remove without review. site_id='site:sha256:43f281407de8ee4454d2b0b7402c01a7036fee1885dc25855039e04b239fec1a'
-                _gr_client = _lineaje_load_gr_client()
-                _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:43f281407de8ee4454d2b0b7402c01a7036fee1885dc25855039e04b239fec1a', phase='log_emit', boundary={'source': 'log', 'sink': 'log'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_010', 'guardrail_id': 'Mask PII in Logs', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='log')
+            last_exc: Optional[Exception] = None
+            for attempt in range(1, _MAX_ATTEMPTS + 1):
                 try:
-                    _lineaje_payload = _gr_client.enforce(_gr_site, _lineaje_payload, content_type='application/json')
-                except _gr_client.GuardrailUnavailableError:
-                    pass
-                except PermissionError:
-                    pass
-                logger.warning(
-                    _lineaje_payload,
-                    extra={"model": model, "error": str(exc)},
-                )
-                return f"Model gateway unavailable for {model}: {exc}"
+                    response = requests.post(
+                        f"{self.base_url}/chat/completions",
+                        json=payload,
+                        headers=headers,
+                        timeout=30,
+                    )
+                    response.raise_for_status()
+                    data = response.json()
+                    choices = data.get("choices", [])
+                    if choices:
+                        message = choices[0].get("message", {})
+                        content = message.get("content", "")
+                        if isinstance(content, str):
+                            return content.strip()
+                    return f"Model API returned no content for model {model}."
+                except requests.HTTPError as exc:
+                    last_exc = exc
+                    status = exc.response.status_code if exc.response is not None else None
+                    # Retry only on transient upstream 5xx (e.g. 504 gateway
+                    # timeout). 4xx are caller errors — fail fast.
+                    if status is not None and 500 <= status < 600 and attempt < _MAX_ATTEMPTS:
+                        logger.warning(
+                            "Model gateway %s — retrying (%d/%d)",
+                            status, attempt, _MAX_ATTEMPTS,
+                            extra={"model": model},
+                        )
+                        time.sleep(_RETRY_BACKOFF_SEC * attempt)
+                        continue
+                    break
+                except (requests.Timeout, requests.ConnectionError) as exc:
+                    last_exc = exc
+                    if attempt < _MAX_ATTEMPTS:
+                        logger.warning(
+                            "Model gateway network error — retrying (%d/%d): %s",
+                            attempt, _MAX_ATTEMPTS, exc,
+                            extra={"model": model},
+                        )
+                        time.sleep(_RETRY_BACKOFF_SEC * attempt)
+                        continue
+                    break
+                except requests.RequestException as exc:
+                    last_exc = exc
+                    break
+
+            _lineaje_payload = "Model gateway request failed"
+            # LINEAJE: enforce() `_lineaje_payload` at agent->log log_emit — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.); AI_APP_SEC_028 (Do not use LLMs from the organization's disallowed list). Mask/block; do not remove without review. site_id='site:sha256:43f281407de8ee4454d2b0b7402c01a7036fee1885dc25855039e04b239fec1a'
+            _gr_client = _lineaje_load_gr_client()
+            _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:43f281407de8ee4454d2b0b7402c01a7036fee1885dc25855039e04b239fec1a', phase='log_emit', boundary={'source': 'log', 'sink': 'log'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_010', 'guardrail_id': 'Mask PII in Logs', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='log')
+            try:
+                _lineaje_payload = _gr_client.enforce(_gr_site, _lineaje_payload, content_type='application/json')
+            except _gr_client.GuardrailUnavailableError:
+                pass
+            except PermissionError:
+                pass
+            logger.warning(
+                _lineaje_payload,
+                extra={"model": model, "error": str(last_exc)},
+            )
+            return f"Model gateway unavailable for {model}: {last_exc}"
 
         return await asyncio.to_thread(_post)
 

