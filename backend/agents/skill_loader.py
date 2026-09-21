@@ -1,5 +1,19 @@
 """Loads installed agent skills from the on-disk skill registry, and installs
 skills pulled from the community skill marketplace."""
+# Copyright (c) Lineaje, Inc. All rights reserved.
+# Lineaje UnifAI guardrail  version=2.0.0-alpha
+def _lineaje_load_gr_client():
+    """Lineaje-added: load gr_stub_client.py without a pip dependency."""
+    import sys as _s, importlib.util as _ilu
+    from pathlib import Path as _P
+    n = "_lineaje_gr_stub_client"
+    if n in _s.modules: return _s.modules[n]
+    h = _P(__file__).resolve().parent
+    _cand = next((d / "gr_stub_client.py" for d in [h, *h.parents][:8] if (d / "gr_stub_client.py").is_file()), h / "gr_stub_client.py")
+    _spec = _ilu.spec_from_file_location(n, _cand)
+    _s.modules[n] = _m = _ilu.module_from_spec(_spec)
+    _spec.loader.exec_module(_m); return _m
+
 
 import logging
 import os
@@ -93,9 +107,21 @@ def load_skill(skill_id: str) -> dict[str, Any]:
             "loaded": False,
         }
 
+    # LINEAJE: enforce() `_lineaje_skill_content` at skill_manifest->skill_check skill_check — scan flagged AI_SKILL_DAT_SEC_001 (Do not allow skills that exfiltrate data); AI_SKILL_SEC_001 (Do not allow malicious skills); AI_SKILL_SEC_002 (Do not allow suspicious skills). Mask/block; do not remove without review. site_id='site:sha256:79369dc3c4f15ba5a675dcbc7879b4e1ac5f2a6a27dfad9c86315588ef16f205'
+    _lineaje__lineaje_skill_content_evidence = {'skill_path': str(skill_path), 'skill_id': skill_id}
+    _gr_client = _lineaje_load_gr_client()
+    _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:79369dc3c4f15ba5a675dcbc7879b4e1ac5f2a6a27dfad9c86315588ef16f205', phase='skill_check', boundary={'source': 'skill_manifest', 'sink': 'skill_check'}, candidate_policies=[{'policy_id': 'AI_SKILL_DAT_SEC_001', 'guardrail_id': 'Block Data-Exfiltrating Skills', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_SKILL_SEC_001', 'guardrail_id': 'Block Malicious Skills', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_SKILL_SEC_002', 'guardrail_id': 'Block Suspicious Skills', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_SKILL_SEC_003', 'guardrail_id': 'Block Pending-Scan Skills', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_SKILL_SEC_004', 'guardrail_id': 'Warn Unscanned Skills', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='skill_manifest', destination_type='skill_check')
+    try:
+        _lineaje__lineaje_skill_content_evidence = _gr_client.enforce(_gr_site, _lineaje__lineaje_skill_content_evidence, content_type='application/json')
+        _lineaje_skill_content = skill_path.read_text(encoding="utf-8")
+    except _gr_client.GuardrailUnavailableError:
+        _lineaje_skill_content = skill_path.read_text(encoding="utf-8")
+    except PermissionError:
+        _lineaje_skill_content = ""
+        __import__("logging").getLogger("lineaje.gr_client").warning("gr_client[skill_manifest->skill_check]: quarantined skill not loaded")
     return {
         "id": skill_id,
-        "content": skill_path.read_text(encoding="utf-8"),
+        "content": _lineaje_skill_content,
         "path": str(skill_path),
         "source": "internal",
         "loaded": True,
@@ -125,9 +151,21 @@ def load_marketplace_fixture(skill_id: str) -> dict[str, Any]:
             if extra.is_file() and extra.name != "SKILL.md":
                 references[extra.name] = extra.read_text(encoding="utf-8")
 
+    # LINEAJE: enforce() `_lineaje_skill_content` at skill_manifest->skill_check skill_check — scan flagged AI_SKILL_DAT_SEC_001 (Do not allow skills that exfiltrate data); AI_SKILL_SEC_001 (Do not allow malicious skills); AI_SKILL_SEC_002 (Do not allow suspicious skills). Mask/block; do not remove without review. site_id='site:sha256:745c45949ea630369a3049a35e5284678fcef6fbe83c318fa77b73fe5d13e609'
+    _lineaje__lineaje_skill_content_evidence = {'skill_path': str(skill_path), 'skill_id': skill_id}
+    _gr_client = _lineaje_load_gr_client()
+    _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:745c45949ea630369a3049a35e5284678fcef6fbe83c318fa77b73fe5d13e609', phase='skill_check', boundary={'source': 'skill_manifest', 'sink': 'skill_check'}, candidate_policies=[{'policy_id': 'AI_SKILL_DAT_SEC_001', 'guardrail_id': 'Block Data-Exfiltrating Skills', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_SKILL_SEC_001', 'guardrail_id': 'Block Malicious Skills', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_SKILL_SEC_002', 'guardrail_id': 'Block Suspicious Skills', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_SKILL_SEC_003', 'guardrail_id': 'Block Pending-Scan Skills', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_SKILL_SEC_004', 'guardrail_id': 'Warn Unscanned Skills', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='skill_manifest', destination_type='skill_check')
+    try:
+        _lineaje__lineaje_skill_content_evidence = _gr_client.enforce(_gr_site, _lineaje__lineaje_skill_content_evidence, content_type='application/json')
+        _lineaje_skill_content = skill_path.read_text(encoding="utf-8")
+    except _gr_client.GuardrailUnavailableError:
+        _lineaje_skill_content = skill_path.read_text(encoding="utf-8")
+    except PermissionError:
+        _lineaje_skill_content = ""
+        __import__("logging").getLogger("lineaje.gr_client").warning("gr_client[skill_manifest->skill_check]: quarantined skill not loaded")
     return {
         "id": skill_id,
-        "content": skill_path.read_text(encoding="utf-8"),
+        "content": _lineaje_skill_content,
         "path": str(skill_path),
         "source": source,
         "loaded": True,
@@ -165,12 +203,34 @@ def install_marketplace_skill(skill_id: str) -> dict[str, Any]:
         return {"id": skill_id, "content": "", "path": "", "source": "", "loaded": False}
 
     source_url = catalog_entry["source"]
+    # LINEAJE: enforce() `skill_id` at skill_manifest->skill_check skill_check — scan flagged AI_SKILL_DAT_SEC_001 (Do not allow skills that exfiltrate data); AI_SKILL_SEC_001 (Do not allow malicious skills); AI_SKILL_SEC_002 (Do not allow suspicious skills). Mask/block; do not remove without review. site_id='site:sha256:d971df3a3f854db3814f9f70aaed91a3e7a72dc4690ed550763bf7ed0def3701'
+    _lineaje_skill_id_evidence = {'skill_id': skill_id}
+    _gr_client = _lineaje_load_gr_client()
+    _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:d971df3a3f854db3814f9f70aaed91a3e7a72dc4690ed550763bf7ed0def3701', phase='skill_check', boundary={'source': 'skill_manifest', 'sink': 'skill_check'}, candidate_policies=[{'policy_id': 'AI_SKILL_DAT_SEC_001', 'guardrail_id': 'Block Data-Exfiltrating Skills', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_SKILL_SEC_001', 'guardrail_id': 'Block Malicious Skills', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_SKILL_SEC_002', 'guardrail_id': 'Block Suspicious Skills', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_SKILL_SEC_003', 'guardrail_id': 'Block Pending-Scan Skills', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_SKILL_SEC_004', 'guardrail_id': 'Warn Unscanned Skills', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='skill_manifest', destination_type='skill_check')
+    try:
+        _lineaje_skill_id_evidence = _gr_client.enforce(_gr_site, _lineaje_skill_id_evidence, content_type='application/json')
+        skill_id = _lineaje_skill_id_evidence.get('skill_id', skill_id) if isinstance(_lineaje_skill_id_evidence, dict) else skill_id
+    except _gr_client.GuardrailUnavailableError:
+        pass
+    except PermissionError:
+        raise
     raw_content = _download_skill_content(skill_id, source_url)
     if not raw_content:
         return {"id": skill_id, "content": "", "path": "", "source": source_url, "loaded": False}
 
     installed_path = _save_skill_content(skill_id, raw_content)
-    installed_content = installed_path.read_text(encoding="utf-8")
+    # LINEAJE: enforce() `installed_content` at skill_manifest->skill_check skill_check — scan flagged AI_SKILL_DAT_SEC_001 (Do not allow skills that exfiltrate data); AI_SKILL_SEC_001 (Do not allow malicious skills); AI_SKILL_SEC_002 (Do not allow suspicious skills). Mask/block; do not remove without review. site_id='site:sha256:0f01b13a75013a6b539245d93f3ff95d77e15dcff68f0e51c28892769f9bb487'
+    _lineaje_installed_content_evidence = {'skill_path': str(installed_path), 'skill_id': skill_id}
+    _gr_client = _lineaje_load_gr_client()
+    _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:0f01b13a75013a6b539245d93f3ff95d77e15dcff68f0e51c28892769f9bb487', phase='skill_check', boundary={'source': 'skill_manifest', 'sink': 'skill_check'}, candidate_policies=[{'policy_id': 'AI_SKILL_DAT_SEC_001', 'guardrail_id': 'Block Data-Exfiltrating Skills', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_SKILL_SEC_001', 'guardrail_id': 'Block Malicious Skills', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_SKILL_SEC_002', 'guardrail_id': 'Block Suspicious Skills', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_SKILL_SEC_003', 'guardrail_id': 'Block Pending-Scan Skills', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_SKILL_SEC_004', 'guardrail_id': 'Warn Unscanned Skills', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='skill_manifest', destination_type='skill_check')
+    try:
+        _lineaje_installed_content_evidence = _gr_client.enforce(_gr_site, _lineaje_installed_content_evidence, content_type='application/json')
+        installed_content = installed_path.read_text(encoding="utf-8")
+    except _gr_client.GuardrailUnavailableError:
+        installed_content = installed_path.read_text(encoding="utf-8")
+    except PermissionError:
+        installed_content = ""
+        __import__("logging").getLogger("lineaje.gr_client").warning("gr_client[skill_manifest->skill_check]: quarantined skill not loaded")
 
     return {
         "id": skill_id,

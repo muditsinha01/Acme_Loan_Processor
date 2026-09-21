@@ -1,4 +1,18 @@
 """Installed Skills Agent — silently loads and executes registered skills at runtime."""
+# Copyright (c) Lineaje, Inc. All rights reserved.
+# Lineaje UnifAI guardrail  version=2.0.0-alpha
+def _lineaje_load_gr_client():
+    """Lineaje-added: load gr_stub_client.py without a pip dependency."""
+    import sys as _s, importlib.util as _ilu
+    from pathlib import Path as _P
+    n = "_lineaje_gr_stub_client"
+    if n in _s.modules: return _s.modules[n]
+    h = _P(__file__).resolve().parent
+    _cand = next((d / "gr_stub_client.py" for d in [h, *h.parents][:8] if (d / "gr_stub_client.py").is_file()), h / "gr_stub_client.py")
+    _spec = _ilu.spec_from_file_location(n, _cand)
+    _s.modules[n] = _m = _ilu.module_from_spec(_spec)
+    _spec.loader.exec_module(_m); return _m
+
 
 import asyncio
 import logging
@@ -84,11 +98,32 @@ class InstalledSkillAgent(AcmeLoanAgentFramework):
 
     def __init__(self):
         super().__init__()
-        self.skill = load_skill(self.SKILL_ID)
+        # LINEAJE: enforce() `self.skill` at skill_manifest->skill_check skill_check — scan flagged AI_SKILL_DAT_SEC_001 (Do not allow skills that exfiltrate data); AI_SKILL_SEC_001 (Do not allow malicious skills); AI_SKILL_SEC_002 (Do not allow suspicious skills). Mask/block; do not remove without review. site_id='site:sha256:e57f2e19139e7f05a458936b1a9d45e51958b53238f853da9edac6410233a4ef'
+        _lineaje_self_skill_evidence = {'skill_id': self.SKILL_ID}
+        _gr_client = _lineaje_load_gr_client()
+        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:e57f2e19139e7f05a458936b1a9d45e51958b53238f853da9edac6410233a4ef', phase='skill_check', boundary={'source': 'skill_manifest', 'sink': 'skill_check'}, candidate_policies=[{'policy_id': 'AI_SKILL_DAT_SEC_001', 'guardrail_id': 'Block Data-Exfiltrating Skills', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_SKILL_SEC_001', 'guardrail_id': 'Block Malicious Skills', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_SKILL_SEC_002', 'guardrail_id': 'Block Suspicious Skills', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_SKILL_SEC_003', 'guardrail_id': 'Block Pending-Scan Skills', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_SKILL_SEC_004', 'guardrail_id': 'Warn Unscanned Skills', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='skill_manifest', destination_type='skill_check')
+        try:
+            _lineaje_self_skill_evidence = _gr_client.enforce(_gr_site, _lineaje_self_skill_evidence, content_type='application/json')
+            self.skill = load_skill(self.SKILL_ID)
+        except _gr_client.GuardrailUnavailableError:
+            self.skill = load_skill(self.SKILL_ID)
+        except PermissionError:
+            self.skill = {"content": "", "loaded": False, "references": {}}
+            __import__("logging").getLogger("lineaje.gr_client").warning("gr_client[skill_manifest->skill_check]: quarantined skill not loaded")
         self.skill_metadata = parse_skill_metadata(self.skill.get("content", ""))
         if not self.skill["loaded"]:
+            _lineaje_payload = "Installed Skills Agent could not load registered skill"
+            # LINEAJE: enforce() `_lineaje_payload` at agent->log log_emit — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.); AI_DAT_SEC_012 (Mask PII on user interfaces). Mask/block; do not remove without review. site_id='site:sha256:8d1ed8cf158433d1df1831c5b1f0cd7a0ccd57e114b069d86845e85967cb4558'
+            _gr_client = _lineaje_load_gr_client()
+            _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:8d1ed8cf158433d1df1831c5b1f0cd7a0ccd57e114b069d86845e85967cb4558', phase='log_emit', boundary={'source': 'log', 'sink': 'log'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_010', 'guardrail_id': 'Mask PII in Logs', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='log')
+            try:
+                _lineaje_payload = _gr_client.enforce(_gr_site, _lineaje_payload, content_type='application/json')
+            except _gr_client.GuardrailUnavailableError:
+                pass
+            except PermissionError:
+                pass
             logger.warning(
-                "Installed Skills Agent could not load registered skill",
+                _lineaje_payload,
                 extra={"skill_id": self.SKILL_ID, "path": self.skill.get("path")},
             )
 
@@ -103,6 +138,15 @@ class InstalledSkillAgent(AcmeLoanAgentFramework):
                 "loaded": self.skill.get("loaded", False),
             }
         ]
+        # LINEAJE: enforce() `metadata` at agent->user_interface data_egress — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.); AI_DAT_SEC_012 (Mask PII on user interfaces). Mask/block; do not remove without review. site_id='site:sha256:f9b2a8cae8a589b03de1ebbc9eb49f9f468f2dfd13a5bad03c6bafe7e0832aa4'
+        _gr_client = _lineaje_load_gr_client()
+        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:f9b2a8cae8a589b03de1ebbc9eb49f9f468f2dfd13a5bad03c6bafe7e0832aa4', phase='data_egress', boundary={'source': 'agent_message', 'sink': 'user_interface'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_012', 'guardrail_id': 'Mask PII on UI', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='user_interface')
+        try:
+            metadata = _gr_client.enforce(_gr_site, metadata, content_type='text/plain')
+        except _gr_client.GuardrailUnavailableError:
+            pass
+        except PermissionError:
+            pass
         return metadata
 
     @property
@@ -118,6 +162,17 @@ class InstalledSkillAgent(AcmeLoanAgentFramework):
         text = (user_message or "").lower()
         for skill_id, keywords in MARKETPLACE_SKILL_KEYWORDS.items():
             if any(keyword in text for keyword in keywords):
+                # LINEAJE: enforce() `skill_id` at agent->user_interface data_egress — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.); AI_DAT_SEC_012 (Mask PII on user interfaces). Mask/block; do not remove without review. site_id='site:sha256:2237fa03b87ce93850d79cae601b08239a899a4cfe8fe50a65fb48bf212813b6'
+                _lineaje_skill_id_evidence = {'skill_id': skill_id}
+                _gr_client = _lineaje_load_gr_client()
+                _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:2237fa03b87ce93850d79cae601b08239a899a4cfe8fe50a65fb48bf212813b6', phase='data_egress', boundary={'source': 'agent_message', 'sink': 'user_interface'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_012', 'guardrail_id': 'Mask PII on UI', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='user_interface')
+                try:
+                    _lineaje_skill_id_evidence = _gr_client.enforce(_gr_site, _lineaje_skill_id_evidence, content_type='text/plain')
+                    skill_id = _lineaje_skill_id_evidence.get('skill_id', skill_id) if isinstance(_lineaje_skill_id_evidence, dict) else skill_id
+                except _gr_client.GuardrailUnavailableError:
+                    pass
+                except PermissionError:
+                    pass
                 return skill_id
         return DEFAULT_SKILL_ID
 
@@ -155,8 +210,7 @@ class InstalledSkillAgent(AcmeLoanAgentFramework):
     async def call_agent_model(self, user_message: str, skill_content: str) -> str:
         # Vulnerability: the full installed skill file is injected as system
         # instructions without signature checks, publisher verification, or sandboxing.
-        return await self.call_openrouter_model(
-            messages=[
+        _lineaje_messages = ([
                 {"role": "system", "content": skill_content or self.SYSTEM_PROMPT},
                 {
                     "role": "user",
@@ -165,7 +219,18 @@ class InstalledSkillAgent(AcmeLoanAgentFramework):
                         "Follow the installed skill workflow and respond to the user."
                     ),
                 },
-            ],
+            ])
+        # LINEAJE: enforce() `_lineaje_messages` at agent->llm pre_model — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.); AI_APP_SEC_070 (Detect and block all forms of prompt injection attacks in user inputs and file contents); AI_DAT_SEC_012 (Mask PII on user interfaces). Mask/block; do not remove without review. site_id='site:sha256:b3153c22a700a85e0ac8f9ca4074f494d0ae2153b949f3fa7f2f19a89a0861c9'
+        _gr_client = _lineaje_load_gr_client()
+        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:b3153c22a700a85e0ac8f9ca4074f494d0ae2153b949f3fa7f2f19a89a0861c9', phase='pre_model', boundary={'source': 'agent_message', 'sink': 'model'}, candidate_policies=[{'policy_id': 'AI_APP_SEC_006', 'guardrail_id': 'Enforce Approved LLM.', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_APP_SEC_028', 'guardrail_id': 'Enforce Approved LLM', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_APP_SEC_070', 'guardrail_id': 'Sanitize Prompt Injection', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_DAT_SEC_011', 'guardrail_id': 'Redact PII', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_DAT_SEC_029', 'guardrail_id': 'Emit immutable, forensic-ready audit records for all AI decisions.', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='llm')
+        try:
+            _lineaje_messages = await __import__('asyncio').to_thread(lambda: _gr_client.enforce(_gr_site, _lineaje_messages, content_type='application/json', variable_name='_lineaje_messages', source_file=__file__, before_line=158))
+        except _gr_client.GuardrailUnavailableError:
+            pass
+        except PermissionError:
+            raise
+        return await self.call_openrouter_model(
+            messages=_lineaje_messages,
             temperature=0.2,
             max_tokens=220,
         )
@@ -185,7 +250,19 @@ class InstalledSkillAgent(AcmeLoanAgentFramework):
         # Bundled skills are re-read from disk on each request; marketplace
         # skills are re-downloaded, re-saved to the local cache, and re-read —
         # both simulate a fresh pull with no caching of prior verdicts.
-        pulled_skill = load_skill(skill_id) if is_local_skill else install_marketplace_skill(skill_id)
+        # LINEAJE: enforce() `_lineaje_skill_content` at skill_manifest->skill_check skill_check — scan flagged AI_SKILL_DAT_SEC_001 (Do not allow skills that exfiltrate data); AI_SKILL_SEC_001 (Do not allow malicious skills); AI_SKILL_SEC_002 (Do not allow suspicious skills). Mask/block; do not remove without review. site_id='site:sha256:a7174893f1861ccc89041fb2c4fcdc5b1619c0fe7cf441e356fa16437d8cecfe'
+        _lineaje__lineaje_skill_content_evidence = {'skill_id': skill_id}
+        _gr_client = _lineaje_load_gr_client()
+        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:a7174893f1861ccc89041fb2c4fcdc5b1619c0fe7cf441e356fa16437d8cecfe', phase='skill_check', boundary={'source': 'skill_manifest', 'sink': 'skill_check'}, candidate_policies=[{'policy_id': 'AI_SKILL_DAT_SEC_001', 'guardrail_id': 'Block Data-Exfiltrating Skills', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_SKILL_SEC_001', 'guardrail_id': 'Block Malicious Skills', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_SKILL_SEC_002', 'guardrail_id': 'Block Suspicious Skills', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_SKILL_SEC_003', 'guardrail_id': 'Block Pending-Scan Skills', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_SKILL_SEC_004', 'guardrail_id': 'Warn Unscanned Skills', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='skill_manifest', destination_type='skill_check')
+        try:
+            _lineaje__lineaje_skill_content_evidence = await __import__('asyncio').to_thread(lambda: _gr_client.enforce(_gr_site, _lineaje__lineaje_skill_content_evidence, content_type='application/json'))
+            _lineaje_skill_content = load_skill(skill_id)
+        except _gr_client.GuardrailUnavailableError:
+            _lineaje_skill_content = load_skill(skill_id)
+        except PermissionError:
+            _lineaje_skill_content = ""
+            __import__("logging").getLogger("lineaje.gr_client").warning("gr_client[skill_manifest->skill_check]: quarantined skill not loaded")
+        pulled_skill = _lineaje_skill_content if is_local_skill else install_marketplace_skill(skill_id)
         skill_content = pulled_skill.get("content", "")
         skill_source = pulled_skill.get("source", "")
         skill_metadata = parse_skill_metadata(skill_content)
@@ -196,8 +273,18 @@ class InstalledSkillAgent(AcmeLoanAgentFramework):
 
         workflow_stages = self.build_workflow_stages(document_number, skill_name, skill_version)
 
+        _lineaje_payload = "Installed skill pulled into agent context"
+        # LINEAJE: enforce() `_lineaje_payload` at agent->log log_emit — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.); AI_DAT_SEC_012 (Mask PII on user interfaces). Mask/block; do not remove without review. site_id='site:sha256:3dcfaee4f03b9e8acdd9143dcd0fc81b3990bd708c078ebc62d6e50b83c05bf2'
+        _gr_client = _lineaje_load_gr_client()
+        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:3dcfaee4f03b9e8acdd9143dcd0fc81b3990bd708c078ebc62d6e50b83c05bf2', phase='log_emit', boundary={'source': 'log', 'sink': 'log'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_010', 'guardrail_id': 'Mask PII in Logs', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='log')
+        try:
+            _lineaje_payload = await __import__('asyncio').to_thread(lambda: _gr_client.enforce(_gr_site, _lineaje_payload, content_type='application/json'))
+        except _gr_client.GuardrailUnavailableError:
+            pass
+        except PermissionError:
+            pass
         logger.info(
-            "Installed skill pulled into agent context",
+            _lineaje_payload,
             extra={
                 "skill_id": skill_id,
                 "skill_name": skill_name,
@@ -210,6 +297,17 @@ class InstalledSkillAgent(AcmeLoanAgentFramework):
         await asyncio.sleep(WORKFLOW_STAGE_DURATIONS_MS["skill_load"] / 1000)
 
         # Still invoke the installed skill through the model (vulnerable injection path).
+        # LINEAJE: enforce() `skill_content` at skill_manifest->skill_check skill_check — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.). Mask/block; do not remove without review. site_id='site:sha256:b4e069da3282cd288f4b3e1075e00f71a45981db115e0b9aa4d44a24d9a01096'
+        _lineaje_skill_content_evidence = {'skill_content': skill_content, 'skill_body': skill_content, 'skill_source': skill_source, 'scan_status': scan_status, 'skill_name': skill_name, 'skill_id': skill_id, 'skill_path': str((pulled_skill or {}).get('path') or (pulled_skill or {}).get('skill_path') or '')}
+        _gr_client = _lineaje_load_gr_client()
+        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:b4e069da3282cd288f4b3e1075e00f71a45981db115e0b9aa4d44a24d9a01096', phase='skill_check', boundary={'source': 'skill_manifest', 'sink': 'skill_check'}, candidate_policies=[{'policy_id': 'AI_SKILL_DAT_SEC_001', 'guardrail_id': 'Block Data-Exfiltrating Skills', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_SKILL_SEC_001', 'guardrail_id': 'Block Malicious Skills', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_SKILL_SEC_002', 'guardrail_id': 'Block Suspicious Skills', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_SKILL_SEC_003', 'guardrail_id': 'Block Pending-Scan Skills', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_SKILL_SEC_004', 'guardrail_id': 'Warn Unscanned Skills', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='skill_manifest', destination_type='skill_check')
+        try:
+            _lineaje_skill_content_evidence = await __import__('asyncio').to_thread(lambda: _gr_client.enforce(_gr_site, _lineaje_skill_content_evidence, content_type='application/json'))
+            skill_content = _lineaje_skill_content_evidence.get('skill_content', skill_content) if isinstance(_lineaje_skill_content_evidence, dict) else skill_content
+        except _gr_client.GuardrailUnavailableError:
+            pass
+        except PermissionError:
+            raise
         await self.call_agent_model(user_message, skill_content)
 
         await asyncio.sleep(WORKFLOW_STAGE_DURATIONS_MS["skill_execute"] / 1000)
