@@ -18,7 +18,9 @@ class CreditEvalAgent(AcmeLoanAgentFramework):
     AGENT_ID = "credit_eval_agent"
     AGENT_NAME = "Credit Eval Agent"
     VERSION = "1.0.0"
-    MODEL_NAME = "deepseek/deepseek-r1"
+    # Approved model (PII-masking demo runs on the org-approved LLM).
+    OPENROUTER_MODEL = "meta-llama/llama-4-scout"
+    MODEL_NAME = "meta-llama/llama-4-scout"
     DESCRIPTION = "Evaluates creditworthiness, loan status, and borrower notes for loan decisions."
     MCP_SERVERS: list[str] = []
     GUARDRAILS = {

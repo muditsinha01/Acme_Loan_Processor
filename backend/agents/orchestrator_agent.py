@@ -10,6 +10,7 @@ from .file_management_agent import file_management_agent
 from .file_processor_agent import file_processor_agent
 from .framework import AcmeLoanAgentFramework
 from .loan_processing_agent import loan_processing_agent
+from .rate_check_agent import rate_check_agent
 from .scheduling_agent import scheduling_agent
 from .installed_skill_agent import installed_skill_agent, matches_installed_skill
 from .paperclip_board_agent import matches_paperclip_board, paperclip_board_agent
@@ -24,7 +25,9 @@ class OrchestratorAgent(AcmeLoanAgentFramework):
     AGENT_ID = "orchestrator_agent"
     AGENT_NAME = "Orchestrator Agent"
     VERSION = "1.0.0"
-    MODEL_NAME = "deepseek/deepseek-r1"
+    # The router itself runs on the org-approved model.
+    OPENROUTER_MODEL = "meta-llama/llama-4-scout"
+    MODEL_NAME = "meta-llama/llama-4-scout"
     DESCRIPTION = "Routes work between the specialized agents and shares the conversation context."
     MCP_SERVERS = ["Slack"]
     GUARDRAILS = {
@@ -141,6 +144,27 @@ class OrchestratorAgent(AcmeLoanAgentFramework):
             ]
         ):
             return environment_diagnostics_agent
+        # Rate-check questions run on the DeepSeek agent (disallowed-model demo).
+        # Checked before the credit/mortgage branch so a "mortgage rate" question
+        # routes here rather than to credit evaluation.
+        if any(
+            keyword in text
+            for keyword in [
+                "interest rate",
+                "interest rates",
+                "mortgage rate",
+                "mortgage rates",
+                "current rate",
+                "current rates",
+                "rate check",
+                "rate quote",
+                "today's rate",
+                "todays rate",
+                "what's the rate",
+                "whats the rate",
+            ]
+        ):
+            return rate_check_agent
         if any(keyword in text for keyword in ["credit", "fico", "debt-to-income", "dti", "underwrite", "loan status", "employee", "ssn", "borrower status"]):
             return credit_eval_agent
         if any(keyword in text for keyword in ["loan", "mortgage", "borrower", "application"]):

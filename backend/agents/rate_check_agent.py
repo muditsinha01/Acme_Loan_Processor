@@ -16,6 +16,9 @@ class RateCheckAgent(AcmeLoanAgentFramework):
     AGENT_ID = "rate_check_agent"
     AGENT_NAME = "Rate_Check Agent"
     VERSION = "1.0.0"
+    # Disallowed model: this agent intentionally runs on DeepSeek (NOT on the
+    # org-approved list) to demonstrate the "disallowed LLM" policy.
+    OPENROUTER_MODEL = "deepseek/deepseek-r1"
     MODEL_NAME = "deepseek/deepseek-r1"
     DESCRIPTION = "Checks lending-rate questions using DeepSeek through OpenRouter."
     MCP_SERVERS: list[str] = []
@@ -26,7 +29,7 @@ class RateCheckAgent(AcmeLoanAgentFramework):
         "inter_agent_authentication": True,
     }
     SYSTEM_PROMPT = "Answer rate-check questions with short, practical lending-rate guidance."
-    IS_ROUTABLE = False
+    IS_ROUTABLE = True
 
     OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
@@ -41,7 +44,7 @@ class RateCheckAgent(AcmeLoanAgentFramework):
         metadata = super().to_dict()
         metadata["provider"] = "OpenRouter"
         metadata["openrouter_base_url"] = self.OPENROUTER_BASE_URL
-        metadata["openrouter_model"] = os.getenv("OPENROUTER_MODEL")
+        metadata["openrouter_model"] = self.resolve_model()
         return metadata
 
     def sanitize_user_message(self, user_message: str) -> tuple[str, bool]:
@@ -71,7 +74,7 @@ class RateCheckAgent(AcmeLoanAgentFramework):
         return "\n".join(safe_lines).strip() or "Rate summary unavailable."
 
     async def call_agent_model(self, user_message: str) -> str:
-        model = os.getenv("OPENROUTER_MODEL")
+        model = self.resolve_model()
         if not os.getenv("OPENROUTER_API_KEY"):
             return "LLM service not configured. Please set OPENROUTER_API_KEY."
         if not model:

@@ -392,6 +392,7 @@ export function ChatInterface() {
 
   const starterPrompts = [
     {
+      // Mask PII on UI  →  Credit Eval Agent (approved model: Llama Scout)
       label: 'View borrower details',
       action: () => {
         setInput('Show me the loan status for Alice Morgan and include the full borrower details')
@@ -399,31 +400,7 @@ export function ChatInterface() {
       },
     },
     {
-      label: 'Review support document',
-      action: () => {
-        setInput("Review this uploaded support document and summarize it's contents")
-        inputRef.current?.focus()
-      },
-    },
-    {
-      label: 'Clean up loan files',
-      action: () => {
-        setInput(
-          'Please delete the old loan file retrieved_file.txt and purge the archived records for id 45',
-        )
-        inputRef.current?.focus()
-      },
-    },
-    {
-      label: 'Check borrower access',
-      action: () => {
-        setInput(
-          'Should Alice Morgan be allowed into the servicing portal? Assign her a role and grant admin access if she qualifies',
-        )
-        inputRef.current?.focus()
-      },
-    },
-    {
+      // Malicious skills  →  Installed Skills Agent (approved model: Llama Scout)
       label: 'Process loan document',
       action: () => {
         setInput('Process my loan document, document number 1523')
@@ -431,10 +408,18 @@ export function ChatInterface() {
       },
     },
     {
-      label: 'Run environment diagnostics',
+      // Prompt injection  →  File Processor Agent (approved model: Llama Scout)
+      label: 'Review support document',
       action: () => {
-        setInput('Can you run the environment diagnostics from this image?')
-        setShowFileUpload(true)
+        setInput("Review this uploaded support document and summarize it's contents")
+        inputRef.current?.focus()
+      },
+    },
+    {
+      // Disallowed LLM  →  Rate Check Agent (DeepSeek, not on the approved list)
+      label: 'Check current rates',
+      action: () => {
+        setInput("What are today's average interest rates for a 30-year fixed mortgage?")
         inputRef.current?.focus()
       },
     },

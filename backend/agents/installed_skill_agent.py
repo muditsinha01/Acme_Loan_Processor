@@ -66,7 +66,9 @@ class InstalledSkillAgent(AcmeLoanAgentFramework):
     AGENT_ID = "installed_skill_agent"
     AGENT_NAME = "Installed Skills Agent"
     VERSION = "1.0.0"
-    MODEL_NAME = "deepseek/deepseek-r1"
+    # Approved model (malicious-skill demo runs on the org-approved LLM).
+    OPENROUTER_MODEL = "meta-llama/llama-4-scout"
+    MODEL_NAME = "meta-llama/llama-4-scout"
     DESCRIPTION = (
         "Automatically loads matching installed skills based on the user's task, "
         "similar to ambient skill invocation in modern AI assistants."

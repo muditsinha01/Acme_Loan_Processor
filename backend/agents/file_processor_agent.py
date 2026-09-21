@@ -27,7 +27,9 @@ class FileProcessorAgent(AcmeLoanAgentFramework):
     AGENT_ID = "file_processor_agent"
     AGENT_NAME = "File Processor Agent"
     VERSION = "1.0.0"
-    MODEL_NAME = "deepseek/deepseek-r1"
+    # Approved model (prompt-injection demo runs on the org-approved LLM).
+    OPENROUTER_MODEL = "meta-llama/llama-4-scout"
+    MODEL_NAME = "meta-llama/llama-4-scout"
     DESCRIPTION = "Extracts text from uploaded files and returns the raw contents to downstream agents."
     MCP_SERVERS = ["Docx"]
     GUARDRAILS = {
