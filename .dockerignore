@@ -10,3 +10,10 @@ demo_pdfs
 test_files
 documentation
 scripts
+
+# Skill manifests are .md but ARE needed at runtime — re-include them.
+!SKILL.md
+!marketplace_fixtures
+!marketplace_fixtures/**
+!.claude
+!.claude/**
