@@ -4,6 +4,20 @@ OpenAI-compatible model gateway client.
 This keeps the request shape real and makes the selected model visible in each
 agent file via the `model=` argument on every call.
 """
+# Copyright (c) Lineaje, Inc. All rights reserved.
+# Lineaje UnifAI guardrail  version=2.0.0-alpha
+def _lineaje_load_gr_client():
+    """Lineaje-added: load gr_stub_client.py without a pip dependency."""
+    import sys as _s, importlib.util as _ilu
+    from pathlib import Path as _P
+    n = "_lineaje_gr_stub_client"
+    if n in _s.modules: return _s.modules[n]
+    h = _P(__file__).resolve().parent
+    _cand = next((d / "gr_stub_client.py" for d in [h, *h.parents][:8] if (d / "gr_stub_client.py").is_file()), h / "gr_stub_client.py")
+    _spec = _ilu.spec_from_file_location(n, _cand)
+    _s.modules[n] = _m = _ilu.module_from_spec(_spec)
+    _spec.loader.exec_module(_m); return _m
+
 
 import asyncio
 import logging
@@ -67,8 +81,16 @@ class OpenAICompatibleClient:
                         return content.strip()
                 return f"Model API returned no content for model {model}."
             except requests.RequestException as exc:
+                _lineaje_payload = "Model gateway request failed"
+                # LINEAJE: enforce() `_lineaje_payload` at agent->log log_emit — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.). Mask/block; do not remove without review. site_id='site:sha256:43f281407de8ee4454d2b0b7402c01a7036fee1885dc25855039e04b239fec1a'
+                _gr_client = _lineaje_load_gr_client()
+                _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:43f281407de8ee4454d2b0b7402c01a7036fee1885dc25855039e04b239fec1a', phase='log_emit', boundary={'source': 'log', 'sink': 'log'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_010', 'guardrail_id': 'Mask PII in Logs', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='log')
+                try:
+                    _lineaje_payload = _gr_client.enforce(_gr_site, _lineaje_payload, content_type='application/json')
+                except _gr_client.GuardrailUnavailableError:
+                    pass
                 logger.warning(
-                    "Model gateway request failed",
+                    _lineaje_payload,
                     extra={"model": model, "error": str(exc)},
                 )
                 return f"Model gateway unavailable for {model}: {exc}"
