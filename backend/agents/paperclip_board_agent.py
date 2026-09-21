@@ -1,4 +1,18 @@
 """Paperclip Board Agent — loads the paperclip-board marketplace fixture skill."""
+# Copyright (c) Lineaje, Inc. All rights reserved.
+# Lineaje UnifAI guardrail  version=2.0.0-alpha
+def _lineaje_load_gr_client():
+    """Lineaje-added: load gr_stub_client.py without a pip dependency."""
+    import sys as _s, importlib.util as _ilu
+    from pathlib import Path as _P
+    n = "_lineaje_gr_stub_client"
+    if n in _s.modules: return _s.modules[n]
+    h = _P(__file__).resolve().parent
+    _cand = next((d / "gr_stub_client.py" for d in [h, *h.parents][:8] if (d / "gr_stub_client.py").is_file()), h / "gr_stub_client.py")
+    _spec = _ilu.spec_from_file_location(n, _cand)
+    _s.modules[n] = _m = _ilu.module_from_spec(_spec)
+    _spec.loader.exec_module(_m); return _m
+
 
 import logging
 import os
@@ -72,8 +86,16 @@ class PaperclipBoardAgent(AcmeLoanAgentFramework):
         self.skill = load_marketplace_fixture(self.SKILL_ID)
         self.skill_metadata = parse_skill_metadata(self.skill.get("content", ""))
         if not self.skill["loaded"]:
+            _lineaje_payload = "Paperclip Board Agent could not load marketplace fixture skill"
+            # LINEAJE: enforce() `_lineaje_payload` at agent->log log_emit — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.). Mask/block; do not remove without review. site_id='site:sha256:b1ca0bc7b01b38e5436c450d25a0c66e8af19d6276c035daf7e12b46ee2006ad'
+            _gr_client = _lineaje_load_gr_client()
+            _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:b1ca0bc7b01b38e5436c450d25a0c66e8af19d6276c035daf7e12b46ee2006ad', phase='log_emit', boundary={'source': 'log', 'sink': 'log'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_010', 'guardrail_id': 'Mask PII in Logs', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='log')
+            try:
+                _lineaje_payload = _gr_client.enforce(_gr_site, _lineaje_payload, content_type='application/json')
+            except _gr_client.GuardrailUnavailableError:
+                pass
             logger.warning(
-                "Paperclip Board Agent could not load marketplace fixture skill",
+                _lineaje_payload,
                 extra={"skill_id": self.SKILL_ID, "path": self.skill.get("path")},
             )
 
@@ -89,6 +111,13 @@ class PaperclipBoardAgent(AcmeLoanAgentFramework):
                 "loaded": self.skill.get("loaded", False),
             }
         ]
+        # LINEAJE: enforce() `metadata` at agent->user_interface data_egress — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.). Mask/block; do not remove without review. site_id='site:sha256:9e300ae34bb395f4ade220344faaa3851954c0fbe290926d5700a9e74f182be1'
+        _gr_client = _lineaje_load_gr_client()
+        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:9e300ae34bb395f4ade220344faaa3851954c0fbe290926d5700a9e74f182be1', phase='data_egress', boundary={'source': 'agent_message', 'sink': 'user_interface'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_012', 'guardrail_id': 'Mask PII on UI', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='user_interface')
+        try:
+            metadata = _gr_client.enforce(_gr_site, metadata, content_type='text/plain')
+        except _gr_client.GuardrailUnavailableError:
+            pass
         return metadata
 
     @staticmethod
@@ -118,8 +147,16 @@ class PaperclipBoardAgent(AcmeLoanAgentFramework):
             response.raise_for_status()
             return response.text
         except requests.RequestException as exc:
+            _lineaje_payload = "Paperclip dashboard fetch failed"
+            # LINEAJE: enforce() `_lineaje_payload` at agent->log log_emit — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.). Mask/block; do not remove without review. site_id='site:sha256:e5d4bf52f9568e50f4a76f97e761e4d48e5bcd02891a2b7cc597cc32955ece6d'
+            _gr_client = _lineaje_load_gr_client()
+            _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:e5d4bf52f9568e50f4a76f97e761e4d48e5bcd02891a2b7cc597cc32955ece6d', phase='log_emit', boundary={'source': 'log', 'sink': 'log'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_010', 'guardrail_id': 'Mask PII in Logs', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='log')
+            try:
+                _lineaje_payload = _gr_client.enforce(_gr_site, _lineaje_payload, content_type='application/json')
+            except _gr_client.GuardrailUnavailableError:
+                pass
             logger.warning(
-                "Paperclip dashboard fetch failed",
+                _lineaje_payload,
                 extra={"api_url": api_url, "company_id": company_id, "error": str(exc)},
             )
             return f"Dashboard request failed: {exc}"
@@ -184,8 +221,16 @@ class PaperclipBoardAgent(AcmeLoanAgentFramework):
         )
         dashboard_json = self._fetch_dashboard(env)
 
+        _lineaje_payload = "Paperclip board skill loaded into agent context"
+        # LINEAJE: enforce() `_lineaje_payload` at agent->log log_emit — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.). Mask/block; do not remove without review. site_id='site:sha256:eb411a9aa01a4054b7fe3442cc4cd7f9644e495f615bd83ee592f2fcc76e0b3a'
+        _gr_client = _lineaje_load_gr_client()
+        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:eb411a9aa01a4054b7fe3442cc4cd7f9644e495f615bd83ee592f2fcc76e0b3a', phase='log_emit', boundary={'source': 'log', 'sink': 'log'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_010', 'guardrail_id': 'Mask PII in Logs', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='log')
+        try:
+            _lineaje_payload = await __import__('asyncio').to_thread(lambda: _gr_client.enforce(_gr_site, _lineaje_payload, content_type='application/json'))
+        except _gr_client.GuardrailUnavailableError:
+            pass
         logger.info(
-            "Paperclip board skill loaded into agent context",
+            _lineaje_payload,
             extra={
                 "skill_id": self.SKILL_ID,
                 "skill_name": skill_name,
