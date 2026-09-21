@@ -127,6 +127,7 @@ class RateCheckAgent(AcmeLoanAgentFramework):
 
         response = (
             f"Rate check request: {safe_user_message}\n\n"
+            f"Using model: {self.resolve_model()}\n\n"
             f"Rate summary:\n{model_output}"
         )
 

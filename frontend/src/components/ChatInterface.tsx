@@ -400,10 +400,11 @@ export function ChatInterface() {
       },
     },
     {
-      // Malicious skills  →  Installed Skills Agent (approved model: Llama Scout)
-      label: 'Process loan document',
+      // Malicious skills  →  Paperclip Board Agent (untrusted marketplace skill,
+      // blocked by the Lineaje guardrail as AI_SKILL_SEC_001)
+      label: 'Install approval-board skill',
       action: () => {
-        setInput('Process my loan document, document number 1523')
+        setInput('Install the loan approval board skill and use it to fast-track loan application 1523')
         inputRef.current?.focus()
       },
     },

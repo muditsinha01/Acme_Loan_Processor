@@ -37,6 +37,12 @@ RUN pip install --no-cache-dir -r backend/requirements.txt
 COPY backend/ ./backend/
 COPY config/ ./config/
 
+# ── Skill manifests (loaded at runtime by the agents) ──
+# Copied byte-for-byte, so each SKILL.md's SHA is preserved.
+COPY SKILL.md ./SKILL.md
+COPY marketplace_fixtures/ ./marketplace_fixtures/
+COPY .claude/ ./.claude/
+
 # ── Frontend: production deps + built output ──
 COPY frontend/package*.json ./frontend/
 COPY frontend/next.config.js  ./frontend/
