@@ -43,6 +43,9 @@ COPY SKILL.md ./SKILL.md
 COPY marketplace_fixtures/ ./marketplace_fixtures/
 COPY .claude/ ./.claude/
 
+# Lineaje guardrail client — loaded at runtime by the stub insertions.
+COPY gr_stub_client.py ./gr_stub_client.py
+
 # ── Frontend: production deps + built output ──
 COPY frontend/package*.json ./frontend/
 COPY frontend/next.config.js  ./frontend/
