@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       scan_mode:
-        description: "Scan the whole repo or a single file"
+        description: "Scan the whole repo, a folder, or a single file"
         type: choice
-        options: [repo, file]
+        options: [repo, folder, file]
         default: repo
 
       target_repo:
@@ -24,6 +24,11 @@ on:
 
       file_path:
         description: "Path to a single file to scan (scan_mode=file only)"
+        required: false
+        default: ""
+
+      folder_path:
+        description: "Path to a folder to scan (scan_mode=folder only)"
         required: false
         default: ""
 
@@ -62,6 +67,7 @@ jobs:
           IN_TARGET_REPO: ${{ inputs.target_repo }}
           IN_REF: ${{ inputs.ref }}
           IN_FILE_PATH: ${{ inputs.file_path }}
+          IN_FOLDER_PATH: ${{ inputs.folder_path }}
           IN_CREATE_FIX_PR: ${{ inputs.create_fix_pr }}
           PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
           THIS_REPO: ${{ github.repository }}
@@ -74,6 +80,7 @@ jobs:
             ref="$PR_HEAD_REF"
             branch="$PR_HEAD_REF"
             file_path=""
+            folder_path=""
             create_fix_pr="false"
           else
             scan_mode="${IN_SCAN_MODE:-repo}"
@@ -86,6 +93,7 @@ jobs:
             ref="$IN_REF"
             branch="$IN_REF"
             file_path="$IN_FILE_PATH"
+            folder_path="$IN_FOLDER_PATH"
             create_fix_pr="${IN_CREATE_FIX_PR:-false}"
           fi
 
@@ -95,6 +103,7 @@ jobs:
             echo "ref=$ref"
             echo "branch=$branch"
             echo "file_path=$file_path"
+            echo "folder_path=$folder_path"
             echo "create_fix_pr=$create_fix_pr"
           } >> "$GITHUB_OUTPUT"
 
@@ -111,27 +120,76 @@ jobs:
         env:
           SCAN_MODE: ${{ steps.resolve.outputs.scan_mode }}
           FILE_PATH: ${{ steps.resolve.outputs.file_path }}
+          FOLDER_PATH: ${{ steps.resolve.outputs.folder_path }}
         run: |
           set -euo pipefail
 
-          if [ "$SCAN_MODE" = "file" ]; then
-            if [ -z "$FILE_PATH" ]; then
-              echo "::error::scan_mode=file requires file_path"
+          target_root="$(realpath target)"
+
+          case "$SCAN_MODE" in
+            file)
+              if [ -z "$FILE_PATH" ]; then
+                echo "::error::scan_mode=file requires file_path"
+                exit 1
+              fi
+
+              if ! selected_path="$(realpath "target/$FILE_PATH" 2>/dev/null)" || [ ! -f "$selected_path" ]; then
+                echo "::error::File not found in target repo: $FILE_PATH"
+                exit 1
+              fi
+
+              case "$selected_path" in
+                "$target_root"/*) ;;
+                *)
+                  echo "::error::file_path must resolve inside the target repository"
+                  exit 1
+                  ;;
+              esac
+
+              relative_path="${selected_path#"$target_root"/}"
+              mkdir -p "subject/$(dirname "$relative_path")"
+              cp -- "$selected_path" "subject/$relative_path"
+              echo "source_path=subject" >> "$GITHUB_OUTPUT"
+              ;;
+
+            folder)
+              if [ -z "$FOLDER_PATH" ]; then
+                echo "::error::scan_mode=folder requires folder_path"
+                exit 1
+              fi
+
+              if ! selected_path="$(realpath "target/$FOLDER_PATH" 2>/dev/null)" || [ ! -d "$selected_path" ]; then
+                echo "::error::Folder not found in target repo: $FOLDER_PATH"
+                exit 1
+              fi
+
+              case "$selected_path" in
+                "$target_root"/*) ;;
+                "$target_root")
+                  echo "::error::Use scan_mode=repo to scan the repository root"
+                  exit 1
+                  ;;
+                *)
+                  echo "::error::folder_path must resolve inside the target repository"
+                  exit 1
+                  ;;
+              esac
+
+              relative_path="${selected_path#"$target_root"/}"
+              mkdir -p "subject/$(dirname "$relative_path")"
+              cp -a -- "$selected_path" "subject/$relative_path"
+              echo "source_path=subject" >> "$GITHUB_OUTPUT"
+              ;;
+
+            repo)
+              echo "source_path=target" >> "$GITHUB_OUTPUT"
+              ;;
+
+            *)
+              echo "::error::Unsupported scan_mode: $SCAN_MODE"
               exit 1
-            fi
-
-            if [ ! -f "target/$FILE_PATH" ]; then
-              echo "::error::File not found in target repo: $FILE_PATH"
-              exit 1
-            fi
-
-            mkdir -p "subject/$(dirname "$FILE_PATH")"
-            cp "target/$FILE_PATH" "subject/$FILE_PATH"
-
-            echo "source_path=subject" >> "$GITHUB_OUTPUT"
-          else
-            echo "source_path=target" >> "$GITHUB_OUTPUT"
-          fi
+              ;;
+          esac
 
           echo "head_sha=$(git -C target rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
