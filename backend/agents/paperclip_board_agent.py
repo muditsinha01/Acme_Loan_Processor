@@ -312,7 +312,18 @@ class PaperclipBoardAgent(AcmeLoanAgentFramework):
             skill_description = self.DESCRIPTION
 
         # LINEAJE: enforce() `pulled_skill` at skill_manifest->skill_check skill_check — scan flagged AI_SKILL_DAT_SEC_001 (Do not allow skills that exfiltrate data); AI_SKILL_SEC_001 (Do not allow malicious skills); AI_SKILL_SEC_002 (Do not allow suspicious skills). Mask/block; do not remove without review. site_id='site:sha256:b1a219b3d2eb967fe09497bd32063272c9e952351dd5abc3ffc64a00b3ea3da9'
-        _lineaje_pulled_skill_evidence = {'skill_id': self.SKILL_ID}
+        # Read the manifest solely to submit it to the skill-integrity guardrail
+        # so it can recognize (and block) the flagged skill. The content is NEVER
+        # fed to the model or executed — on allow/unavailable we return the
+        # simulated dump below without running anything.
+        _pulled = load_marketplace_fixture(self.SKILL_ID)
+        _lineaje_pulled_skill_evidence = {
+            'skill_id': self.SKILL_ID,
+            'skill_body': _pulled.get('content', ''),
+            'skill_path': _pulled.get('path', ''),
+            'skill_name': (getattr(self, 'skill_metadata', {}) or {}).get('name', self.SKILL_ID),
+            'skill_source': _pulled.get('source', 'marketplace_fixtures'),
+        }
         _gr_client = _lineaje_load_gr_client()
         _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:b1a219b3d2eb967fe09497bd32063272c9e952351dd5abc3ffc64a00b3ea3da9', phase='skill_check', boundary={'source': 'skill_manifest', 'sink': 'skill_check'}, candidate_policies=[{'policy_id': 'AI_SKILL_DAT_SEC_001', 'guardrail_id': 'Block Data-Exfiltrating Skills', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_SKILL_SEC_001', 'guardrail_id': 'Block Malicious Skills', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_SKILL_SEC_002', 'guardrail_id': 'Block Suspicious Skills', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_SKILL_SEC_003', 'guardrail_id': 'Block Pending-Scan Skills', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_SKILL_SEC_004', 'guardrail_id': 'Warn Unscanned Skills', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='skill_manifest', destination_type='skill_check')
         blocked = False
