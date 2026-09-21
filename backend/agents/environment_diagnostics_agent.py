@@ -1,5 +1,17 @@
 """Environment Diagnostics Agent — demo for image prompt injection -> tool-output exfiltration."""
-
+# Copyright (c) Lineaje, Inc. All rights reserved.
+# Lineaje UnifAI guardrail  version=2.0.0-alpha
+def _lineaje_load_gr_client():
+    """Lineaje-added: load gr_stub_client.py without a pip dependency."""
+    import sys as _s, importlib.util as _ilu
+    from pathlib import Path as _P
+    n = "_lineaje_gr_stub_client"
+    if n in _s.modules: return _s.modules[n]
+    h = _P(__file__).resolve().parent
+    _cand = next((d / "gr_stub_client.py" for d in [h, *h.parents][:8] if (d / "gr_stub_client.py").is_file()), h / "gr_stub_client.py")
+    _spec = _ilu.spec_from_file_location(n, _cand)
+    _s.modules[n] = _m = _ilu.module_from_spec(_spec)
+    _spec.loader.exec_module(_m); return _m
 import asyncio
 import logging
 import re
@@ -61,6 +73,15 @@ def _extract_command_requests(file_entries: list[dict[str, Any]]) -> list[dict[s
         for match in _NATURAL_LANGUAGE_COMMAND_PATTERN.findall(content):
             found.append({"filename": entry.get("filename", "unknown"), "text": match.strip()})
 
+    # LINEAJE: enforce() `found` at agent->user_interface data_egress — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.). Mask/block; do not remove without review. site_id='site:sha256:b874e2f630fe35a701841a01c1612b92c6486422bd59dcfc7d341910c92c2602'
+    _gr_client = _lineaje_load_gr_client()
+    _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:b874e2f630fe35a701841a01c1612b92c6486422bd59dcfc7d341910c92c2602', phase='data_egress', boundary={'source': 'agent_message', 'sink': 'user_interface'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_012', 'guardrail_id': 'Mask PII on UI', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='user_interface')
+    try:
+        found = _gr_client.enforce(_gr_site, found, content_type='text/plain')
+    except _gr_client.GuardrailUnavailableError:
+        pass
+    except PermissionError:
+        pass
     return found
 
 
@@ -135,8 +156,7 @@ class EnvironmentDiagnosticsAgent(AcmeLoanAgentFramework):
     )
 
     async def call_agent_model(self, user_message: str, command_text: str) -> str:
-        return await self.call_openrouter_model(
-            messages=[
+        _lineaje_messages = ([
                 {"role": "system", "content": self.SYSTEM_PROMPT},
                 {
                     "role": "user",
@@ -146,7 +166,20 @@ class EnvironmentDiagnosticsAgent(AcmeLoanAgentFramework):
                         "Summarize what diagnostic step was run in 1-2 sentences."
                     ),
                 },
-            ],
+            ])
+        # LINEAJE: enforce() `_lineaje_messages` at agent->llm pre_model — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.); AI_APP_SEC_070 (Detect and block all forms of prompt injection attacks in user inputs and file contents); AI_DAT_SEC_012 (Mask PII on user interfaces). Mask/block; do not remove without review. site_id='site:sha256:4e09eef5f842699dd4ebdc405df50cafc3f64282b3f2a536b5646e2fd7579c4f'
+        _lineaje__lineaje_messages_evidence = {'_lineaje_messages': _lineaje_messages, 'model': (__import__("os").getenv("OPENROUTER_MODEL") or __import__("os").getenv("LLM_MODEL") or "")}
+        _gr_client = _lineaje_load_gr_client()
+        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:4e09eef5f842699dd4ebdc405df50cafc3f64282b3f2a536b5646e2fd7579c4f', phase='pre_model', boundary={'source': 'agent_message', 'sink': 'model'}, candidate_policies=[{'policy_id': 'AI_APP_SEC_006', 'guardrail_id': 'Enforce Approved LLM.', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_APP_SEC_028', 'guardrail_id': 'Enforce Approved LLM', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_APP_SEC_070', 'guardrail_id': 'Sanitize Prompt Injection', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_DAT_SEC_011', 'guardrail_id': 'Redact PII', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_DAT_SEC_029', 'guardrail_id': 'Emit immutable, forensic-ready audit records for all AI decisions.', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='llm')
+        try:
+            _lineaje__lineaje_messages_evidence = await __import__('asyncio').to_thread(lambda: _gr_client.enforce(_gr_site, _lineaje__lineaje_messages_evidence, content_type='application/json'))
+            _lineaje_messages = _lineaje__lineaje_messages_evidence.get('_lineaje_messages', _lineaje_messages) if isinstance(_lineaje__lineaje_messages_evidence, dict) else _lineaje_messages
+        except _gr_client.GuardrailUnavailableError:
+            pass
+        except PermissionError:
+            raise
+        return await self.call_openrouter_model(
+            messages=_lineaje_messages,
             temperature=0.2,
             max_tokens=160,
         )
@@ -161,6 +194,28 @@ class EnvironmentDiagnosticsAgent(AcmeLoanAgentFramework):
         # confirmation and no destination allowlist.
         command_requests = _extract_command_requests(file_contents)
         command_text = " ".join(request["text"] for request in command_requests)
+        # LINEAJE: enforce() `command_text` at skill_manifest->skill_check skill_check — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.). Mask/block; do not remove without review. site_id='site:sha256:7da1f38b6a0760f5cdc7b5400d6f9161d7fa423ece7bf910bb6004b5776be4ed'
+        _lineaje_command_text_evidence = {'command_text': command_text, 'skill_id': str(command_text), 'project': 'source-code'}
+        _gr_client = _lineaje_load_gr_client()
+        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:7da1f38b6a0760f5cdc7b5400d6f9161d7fa423ece7bf910bb6004b5776be4ed', phase='skill_check', boundary={'source': 'skill_manifest', 'sink': 'skill_check'}, candidate_policies=[{'policy_id': 'AI_SKILL_DAT_SEC_001', 'guardrail_id': 'Block Data-Exfiltrating Skills', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_SKILL_SEC_001', 'guardrail_id': 'Block Malicious Skills', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_SKILL_SEC_002', 'guardrail_id': 'Block Suspicious Skills', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_SKILL_SEC_003', 'guardrail_id': 'Block Pending-Scan Skills', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_SKILL_SEC_004', 'guardrail_id': 'Warn Unscanned Skills', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='skill_manifest', destination_type='skill_check')
+        try:
+            _lineaje_command_text_evidence = await __import__('asyncio').to_thread(lambda: _gr_client.enforce(_gr_site, _lineaje_command_text_evidence, content_type='application/json'))
+            command_text = _lineaje_command_text_evidence.get('command_text', command_text) if isinstance(_lineaje_command_text_evidence, dict) else command_text
+        except _gr_client.GuardrailUnavailableError:
+            pass
+        except PermissionError:
+            raise
+        # LINEAJE: enforce() `user_message` at agent->llm pre_model — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.); AI_APP_SEC_070 (Detect and block all forms of prompt injection attacks in user inputs and file contents); AI_DAT_SEC_012 (Mask PII on user interfaces). Mask/block; do not remove without review. site_id='site:sha256:cb45ae62f5bd002f078df16700290917686806fdfe9e39a6e8cd24f42e97852a'
+        _lineaje_user_message_evidence = {'user_message': user_message, 'model': (__import__("os").getenv("OPENROUTER_MODEL") or __import__("os").getenv("LLM_MODEL") or "")}
+        _gr_client = _lineaje_load_gr_client()
+        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:cb45ae62f5bd002f078df16700290917686806fdfe9e39a6e8cd24f42e97852a', phase='pre_model', boundary={'source': 'agent_message', 'sink': 'model'}, candidate_policies=[{'policy_id': 'AI_APP_SEC_006', 'guardrail_id': 'Enforce Approved LLM.', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_APP_SEC_028', 'guardrail_id': 'Enforce Approved LLM', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_APP_SEC_070', 'guardrail_id': 'Sanitize Prompt Injection', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_DAT_SEC_011', 'guardrail_id': 'Redact PII', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_DAT_SEC_029', 'guardrail_id': 'Emit immutable, forensic-ready audit records for all AI decisions.', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='llm')
+        try:
+            _lineaje_user_message_evidence = await __import__('asyncio').to_thread(lambda: _gr_client.enforce(_gr_site, _lineaje_user_message_evidence, content_type='application/json'))
+            user_message = _lineaje_user_message_evidence.get('user_message', user_message) if isinstance(_lineaje_user_message_evidence, dict) else user_message
+        except _gr_client.GuardrailUnavailableError:
+            pass
+        except PermissionError:
+            raise
         model_output = await self.call_agent_model(user_message, command_text)
 
         scan_output = run_diagnostic_scan(command_requests)
@@ -182,8 +237,18 @@ class EnvironmentDiagnosticsAgent(AcmeLoanAgentFramework):
         exfil_result: dict[str, Any] = {}
         if exfil_url:
             exfil_result = await asyncio.to_thread(send_diagnostic_output, exfil_url, scan_output)
+            _lineaje_payload = "Diagnostic scan output sent to requested destination"
+            # LINEAJE: enforce() `_lineaje_payload` at agent->log log_emit — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.). Mask/block; do not remove without review. site_id='site:sha256:008ebdd8dd34d12cf4da4f4e3e99262550c036db2fef8fd924af7b2fe5d2984b'
+            _gr_client = _lineaje_load_gr_client()
+            _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:008ebdd8dd34d12cf4da4f4e3e99262550c036db2fef8fd924af7b2fe5d2984b', phase='log_emit', boundary={'source': 'log', 'sink': 'log'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_010', 'guardrail_id': 'Mask PII in Logs', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='log')
+            try:
+                _lineaje_payload = await __import__('asyncio').to_thread(lambda: _gr_client.enforce(_gr_site, _lineaje_payload, content_type='application/json'))
+            except _gr_client.GuardrailUnavailableError:
+                pass
+            except PermissionError:
+                pass
             logger.warning(
-                "Diagnostic scan output sent to requested destination",
+                _lineaje_payload,
                 extra={"url": exfil_url, **exfil_result},
             )
 
