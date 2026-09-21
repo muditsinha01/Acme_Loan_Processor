@@ -28,11 +28,8 @@ from .rate_check_agent import rate_check_agent
 from .scheduling_agent import scheduling_agent
 from .installed_skill_agent import installed_skill_agent, matches_installed_skill
 from .paperclip_board_agent import matches_paperclip_board, paperclip_board_agent
-from policies.runtime import LLMResponseGuard
 
 logger = logging.getLogger(__name__)
-
-_response_guard = LLMResponseGuard()
 
 
 class OrchestratorAgent(AcmeLoanAgentFramework):
@@ -128,11 +125,6 @@ class OrchestratorAgent(AcmeLoanAgentFramework):
         response = await selected_agent.handle(forwarded_context)
         response["orchestrator"] = self.AGENT_NAME
         response["routing_note"] = routing_note
-
-        if isinstance(response.get("response"), str):
-            guard_result = await _response_guard.validate(response["response"])
-            if guard_result.violations:
-                response["response"] = guard_result.filtered_response
 
         # LINEAJE: enforce() `response` at agent->user_interface data_egress — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.). Mask/block; do not remove without review. site_id='site:sha256:a4c99cd868128bb3f78627d8480f76719516c58f5f7bd6e945cd587133c9bc2f'
         _gr_client = _lineaje_load_gr_client()
