@@ -5,7 +5,9 @@ import { v4 as uuidv4 } from 'uuid'
 import { MessageList } from './MessageList'
 import { FileUpload } from './FileUpload'
 import { WorkflowStage } from './SkillWorkflowProgress'
+import { HitlRequestInfo } from './HitlApprovalCard'
 import {
+  applyBackendWorkflowStages,
   buildSkillWorkflowStages,
   extractDocumentNumber,
   isLoanDocumentWorkflow,
@@ -13,43 +15,10 @@ import {
 } from '../lib/skillWorkflow'
 import { ArrowUp, Loader2, Paperclip, Plus } from 'lucide-react'
 
-export interface SkillInvocationInfo {
-  id: string
-  name: string
-  version: string
-  description: string
-  status: string
-}
-
-export interface Message {
-  id: string
-  role: 'user' | 'assistant' | 'system'
-  content: string
-  timestamp: Date
-  attachments?: FileAttachment[]
-  error?: PolicyError
-  kind?: 'text' | 'skill_workflow'
-  workflowStages?: WorkflowStage[]
-  workflowComplete?: boolean
-  skillInvocation?: SkillInvocationInfo
-}
-
-export interface FileAttachment {
-  id: string
-  name: string
-  type: string
-  size: number
-  content?: string
-}
-
-export interface PolicyError {
-  type: 'pii' | 'threat' | 'auth' | 'general'
-  message: string
-  details?: Record<string, unknown>
-}
-
+// Guardrail-enforced requests can be slow (each fans out several /enforce calls),
+// so use the background job + poll flow instead of one long synchronous /chat.
 const CHAT_JOB_POLL_INTERVAL_MS = 30000
-const CHAT_JOB_MAX_POLLS = 20 // ~10 minutes of polling before giving up
+const CHAT_JOB_MAX_POLLS = 20 // ~10 minutes before giving up
 const CHAT_JOB_POLL_RETRY_LIMIT = 3
 
 function sleep(ms: number): Promise<void> {
@@ -57,22 +26,23 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
- * Starts a chat job and polls for its result instead of holding one long
- * connection open through POST /chat — a slow guardrail service can push
- * that request past 30s, which is long enough for a dev --reload restart
- * or a proxy to reset the connection mid-request.
+ * Starts a chat job and polls for its result. Returns the same
+ * { response, data } shape as a direct fetch so callers that check
+ * `response.ok` / read `data` keep working. Job-level errors are surfaced
+ * as a non-ok Response so `if (!response.ok)` handles policy blocks.
  */
 async function startAndPollChatJob(payload: {
   message: string
   attachments: FileAttachment[]
   conversation_id: string
+  hitl_approved?: boolean
 }): Promise<{ response: Response; data: any }> {
   const startResponse = await fetch('/api/backend/chat/jobs', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   })
-  const startData = await startResponse.json()
+  const startData = await startResponse.json().catch(() => ({} as any))
 
   if (!startResponse.ok || !startData.job_id) {
     return {
@@ -110,7 +80,6 @@ async function startAndPollChatJob(payload: {
     }
 
     if (pollResponse.status === 404) {
-      // In-memory job store is gone — most likely the dev backend restarted.
       return {
         response: pollResponse,
         data: {
@@ -125,6 +94,11 @@ async function startAndPollChatJob(payload: {
     consecutivePollFailures = 0
 
     if (pollData.status && pollData.status !== 'pending') {
+      // Surface a job-level policy error as a non-ok response for callers
+      // that branch on response.ok.
+      if (pollData.status === 'error') {
+        return { response: new Response(null, { status: 502 }), data: pollData }
+      }
       return { response: pollResponse, data: pollData }
     }
   }
@@ -139,10 +113,51 @@ async function startAndPollChatJob(payload: {
   }
 }
 
+export interface SkillInvocationInfo {
+  id: string
+  name: string
+  version: string
+  description: string
+  status: string
+}
+
+export interface Message {
+  id: string
+  role: 'user' | 'assistant' | 'system'
+  content: string
+  timestamp: Date
+  attachments?: FileAttachment[]
+  error?: PolicyError
+  kind?: 'text' | 'skill_workflow' | 'hitl_approval'
+  workflowStages?: WorkflowStage[]
+  workflowComplete?: boolean
+  workflowStatus?: string
+  skillInvocation?: SkillInvocationInfo
+  hitlRequest?: HitlRequestInfo
+  originalUserMessage?: string
+  hitlDecision?: 'pending' | 'approved' | 'rejected'
+}
+
+
+export interface FileAttachment {
+  id: string
+  name: string
+  type: string
+  size: number
+  content?: string
+}
+
+export interface PolicyError {
+  type: 'pii' | 'threat' | 'auth' | 'general'
+  message: string
+  details?: Record<string, unknown>
+}
+
 export function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [hitlSubmittingId, setHitlSubmittingId] = useState<string | null>(null)
   const [pendingFiles, setPendingFiles] = useState<File[]>([])
   const [showFileUpload, setShowFileUpload] = useState(false)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -156,7 +171,108 @@ export function ChatInterface() {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, isLoading, showFileUpload])
+  }, [messages, isLoading, showFileUpload, hitlSubmittingId])
+
+  const buildAssistantMessage = (data: Record<string, unknown>, originalMessage: string): Message => {
+    const hitlRequest = data.hitl_request as HitlRequestInfo | undefined
+    const needsHitl = Boolean(hitlRequest?.required && !hitlRequest?.approved)
+
+    return {
+      id: uuidv4(),
+      role: 'assistant',
+      content: String(data.response || ''),
+      timestamp: new Date(),
+      kind: needsHitl ? 'hitl_approval' : 'text',
+      hitlRequest,
+      originalUserMessage: originalMessage,
+      hitlDecision: needsHitl ? 'pending' : hitlRequest?.approved ? 'approved' : undefined,
+      error: data.policy_warning
+        ? {
+            type: (data.policy_warning as PolicyError).type,
+            message: (data.policy_warning as PolicyError).message,
+            details: (data.policy_warning as PolicyError).details,
+          }
+        : undefined,
+    }
+  }
+
+  const sendChatRequest = async (messageText: string, hitlApproved = false) => {
+    return startAndPollChatJob({
+      message: messageText,
+      attachments: [],
+      conversation_id: uuidv4(),
+      hitl_approved: hitlApproved,
+    })
+  }
+
+  const handleHitlApprove = async (message: Message) => {
+    if (!message.originalUserMessage || hitlSubmittingId) return
+
+    setHitlSubmittingId(message.id)
+    setIsLoading(true)
+    try {
+      const { response, data } = await sendChatRequest(message.originalUserMessage, true)
+      if (!response.ok) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: uuidv4(),
+            role: 'assistant',
+            content: data.detail || 'Approval request failed',
+            timestamp: new Date(),
+          },
+        ])
+        return
+      }
+
+      setMessages((prev) =>
+        prev.map((item) =>
+          item.id === message.id
+            ? {
+                ...item,
+                hitlDecision: 'approved',
+                hitlRequest: item.hitlRequest
+                  ? { ...item.hitlRequest, required: false, approved: true, status: 'approved' }
+                  : item.hitlRequest,
+              }
+            : item,
+        ),
+      )
+      setMessages((prev) => [...prev, buildAssistantMessage(data, message.originalUserMessage || '')])
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: uuidv4(),
+          role: 'assistant',
+          content: 'Failed to apply approved request. Please ensure the server is running.',
+          timestamp: new Date(),
+        },
+      ])
+    } finally {
+      setHitlSubmittingId(null)
+      setIsLoading(false)
+    }
+  }
+
+  const handleHitlReject = (message: Message) => {
+    setMessages((prev) =>
+      prev.map((item) =>
+        item.id === message.id
+          ? {
+              ...item,
+              hitlDecision: 'rejected',
+              content:
+                item.content +
+                '\n\nHuman rejected this request. No destructive or security-sensitive actions were applied.',
+              hitlRequest: item.hitlRequest
+                ? { ...item.hitlRequest, required: false, approved: false, status: 'rejected' }
+                : item.hitlRequest,
+            }
+          : item,
+      ),
+    )
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -219,46 +335,81 @@ export function ChatInterface() {
     }
 
     try {
+      let apiResult: { response: Response; data: Record<string, any> } | null = null
+
       const apiPromise = startAndPollChatJob({
         message: messageText,
         attachments,
         conversation_id: uuidv4(),
+        hitl_approved: false,
+      }).then((result) => {
+        apiResult = result
+        return result
       })
 
       if (skillWorkflow) {
         const initialStages = buildSkillWorkflowStages(extractDocumentNumber(messageText))
 
-        const [, apiResult] = await Promise.all([
-          runWorkflowStages(initialStages, (nextStages) => {
-            setMessages(prev =>
-              prev.map(message =>
-                message.id === workflowMessageId
-                  ? { ...message, workflowStages: nextStages }
-                  : message,
-              ),
-            )
-          }).then((completedStages) => {
-            setMessages(prev =>
-              prev.map(message =>
-                message.id === workflowMessageId
-                  ? {
-                      ...message,
-                      workflowStages: completedStages,
-                      workflowComplete: true,
-                      skillInvocation: message.skillInvocation
-                        ? { ...message.skillInvocation, status: 'loaded' }
-                        : message.skillInvocation,
-                    }
-                  : message,
-              ),
-            )
-          }),
+        const [completedStages, apiResultFromPromise] = await Promise.all([
+          runWorkflowStages(
+            initialStages,
+            (nextStages) => {
+              setMessages(prev =>
+                prev.map(message =>
+                  message.id === workflowMessageId
+                    ? { ...message, workflowStages: nextStages }
+                    : message,
+                ),
+              )
+            },
+            {
+              stopWhen: () => apiResult?.data?.workflow_status === 'skill_blocked',
+              onStop: (stages) => {
+                const backendStages = apiResult?.data?.workflow_stages as
+                  | Array<{ id: string; label?: string; status?: string }>
+                  | undefined
+                if (!backendStages) {
+                  return stages
+                }
+                return applyBackendWorkflowStages(stages, backendStages)
+              },
+            },
+          ),
           apiPromise,
         ])
 
-        const { data } = apiResult
+        const { response, data } = apiResultFromPromise
+        const workflowStatus = data.workflow_status as string | undefined
+        const backendStages = data.workflow_stages as
+          | Array<{ id: string; label?: string; status?: string }>
+          | undefined
+        const finalStages = backendStages
+          ? applyBackendWorkflowStages(completedStages, backendStages)
+          : completedStages
+        const skillBlocked = workflowStatus === 'skill_blocked'
 
-        if (data.status === 'error') {
+        setMessages(prev =>
+          prev.map(message =>
+            message.id === workflowMessageId
+              ? {
+                  ...message,
+                  workflowStages: finalStages,
+                  workflowComplete: true,
+                  workflowStatus,
+                  skillInvocation: data.skill_invocation
+                    ? (data.skill_invocation as SkillInvocationInfo)
+                    : message.skillInvocation
+                      ? {
+                          ...message.skillInvocation,
+                          status: skillBlocked ? 'blocked' : 'loaded',
+                        }
+                      : message.skillInvocation,
+                }
+              : message,
+          ),
+        )
+
+        if (!response.ok) {
           const errorMessage: Message = {
             id: uuidv4(),
             role: 'assistant',
@@ -272,38 +423,12 @@ export function ChatInterface() {
           }
           setMessages(prev => [...prev, errorMessage])
         } else {
-          if (data.skill_invocation) {
-            setMessages(prev =>
-              prev.map(message =>
-                message.id === workflowMessageId
-                  ? {
-                      ...message,
-                      skillInvocation: data.skill_invocation,
-                    }
-                  : message,
-              ),
-            )
-          }
-
-          setMessages(prev => [
-            ...prev,
-            {
-              id: uuidv4(),
-              role: 'assistant',
-              content: data.response,
-              timestamp: new Date(),
-              error: data.policy_warning ? {
-                type: data.policy_warning.type,
-                message: data.policy_warning.message,
-                details: data.policy_warning.details,
-              } : undefined,
-            },
-          ])
+          setMessages(prev => [...prev, buildAssistantMessage(data, messageText)])
         }
       } else {
-        const { data } = await apiPromise
+        const { response, data } = await apiPromise
 
-        if (data.status === 'error') {
+        if (!response.ok) {
           const errorMessage: Message = {
             id: uuidv4(),
             role: 'assistant',
@@ -317,18 +442,7 @@ export function ChatInterface() {
           }
           setMessages(prev => [...prev, errorMessage])
         } else {
-          const assistantMessage: Message = {
-            id: uuidv4(),
-            role: 'assistant',
-            content: data.response,
-            timestamp: new Date(),
-            error: data.policy_warning ? {
-              type: data.policy_warning.type,
-              message: data.policy_warning.message,
-              details: data.policy_warning.details,
-            } : undefined,
-          }
-          setMessages(prev => [...prev, assistantMessage])
+          setMessages(prev => [...prev, buildAssistantMessage(data, messageText)])
         }
       }
     } catch (error) {
@@ -436,21 +550,21 @@ export function ChatInterface() {
               <div className="h-3 w-3 rounded-full bg-white/95" />
             </div>
             <div>
-              <h1 className="text-lg font-semibold tracking-tight text-slate-50">Acme Loan Processor</h1>
+              <h1 className="text-lg font-semibold tracking-tight text-slate-900">Acme Loan Processor</h1>
             </div>
           </div>
-          <div className="hidden text-sm text-slate-400 sm:block">Loan assistant</div>
+          <div className="hidden text-sm text-slate-500 sm:block">Loan assistant</div>
         </header>
 
         <div className="chat-scrollbar flex-1 overflow-y-auto px-4 py-5 sm:px-6">
           {messages.length === 0 ? (
             <div className="fade-in-up flex h-full items-start justify-center pt-10 sm:pt-14">
               <div className="w-full max-w-3xl">
-                <p className="text-2xl font-semibold tracking-tight text-slate-50">
+                <p className="text-2xl font-semibold tracking-tight text-slate-900">
                   Hi, how can I help you today?
                 </p>
-                <p className="mt-2 text-sm text-slate-400">
-                  Ask about a loan, review a support document, or check borrower access.
+                <p className="mt-2 text-sm text-slate-500">
+                  Ask about a loan, check borrower status, or review a support document.
                 </p>
                 <div className="mt-6 flex flex-wrap gap-3">
                   {starterPrompts.map((prompt) => (
@@ -458,7 +572,7 @@ export function ChatInterface() {
                       key={prompt.label}
                       type="button"
                       onClick={prompt.action}
-                      className="rounded-full border border-slate-700 bg-slate-900/90 px-4 py-2 text-sm text-slate-200 transition hover:border-sky-500/40 hover:bg-slate-800 hover:text-sky-200"
+                      className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 transition hover:border-sky-200 hover:bg-sky-50 hover:text-sky-700"
                     >
                       {prompt.label}
                     </button>
@@ -468,7 +582,12 @@ export function ChatInterface() {
             </div>
           ) : (
             <>
-              <MessageList messages={messages} />
+              <MessageList
+                messages={messages}
+                hitlSubmittingId={hitlSubmittingId}
+                onHitlApprove={handleHitlApprove}
+                onHitlReject={handleHitlReject}
+              />
               <div ref={messagesEndRef} />
             </>
           )}
@@ -486,12 +605,12 @@ export function ChatInterface() {
               {pendingFiles.map((file, index) => (
                 <div
                   key={`${file.name}-${index}`}
-                  className="flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900 px-3 py-1.5 text-sm text-slate-200"
+                  className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700"
                 >
                   <span className="max-w-[220px] truncate">{file.name}</span>
                   <button
                     onClick={() => removePendingFile(index)}
-                    className="text-slate-500 transition-colors hover:text-rose-400"
+                    className="text-slate-400 transition-colors hover:text-rose-500"
                     aria-label={`Remove ${file.name}`}
                   >
                     ×
@@ -504,12 +623,12 @@ export function ChatInterface() {
 
         <div className="soft-divider border-t px-4 py-4 sm:px-6">
           <form onSubmit={handleSubmit} className="mx-auto max-w-4xl">
-            <div className="rounded-[22px] border border-slate-700 bg-slate-950/90 px-3 py-2 shadow-[0_12px_32px_rgba(2,6,23,0.35)]">
+            <div className="rounded-[22px] border border-slate-200 bg-white/95 px-3 py-2 shadow-[0_12px_32px_rgba(148,163,184,0.18)]">
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setShowFileUpload(!showFileUpload)}
-                  className="inline-flex h-9 shrink-0 items-center gap-2 rounded-xl bg-slate-900 px-3 text-xs text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-100"
+                  className="inline-flex h-9 shrink-0 items-center gap-2 rounded-xl bg-slate-100 px-3 text-xs text-slate-600 transition-colors hover:bg-slate-200 hover:text-slate-900"
                   aria-label={showFileUpload ? 'Hide document upload' : 'Show document upload'}
                 >
                   {showFileUpload ? <Paperclip className="h-[16px] w-[16px]" /> : <Plus className="h-[16px] w-[16px]" />}
@@ -522,8 +641,8 @@ export function ChatInterface() {
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={handleKeyDown}
-                    placeholder="Ask about a loan, review a support document, or check borrower access..."
-                    className="max-h-40 w-full resize-none bg-transparent px-1 py-0 text-[15px] leading-[24px] text-slate-100 outline-none placeholder:text-slate-500"
+                    placeholder="Ask about a loan, review borrower details, or attach a support document..."
+                    className="max-h-40 w-full resize-none bg-transparent px-1 py-0 text-[15px] leading-[24px] text-slate-900 outline-none placeholder:text-slate-400"
                     rows={1}
                     disabled={isLoading}
                   />
@@ -532,7 +651,7 @@ export function ChatInterface() {
                 <button
                   type="submit"
                   disabled={isLoading || (!input.trim() && pendingFiles.length === 0)}
-                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[16px] bg-gradient-to-br from-blue-600 to-sky-500 text-white transition hover:from-blue-700 hover:to-sky-600 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500"
+                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[16px] bg-gradient-to-br from-blue-600 to-sky-500 text-white transition hover:from-blue-700 hover:to-sky-600 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
                   aria-label="Send message"
                 >
                   {isLoading ? (

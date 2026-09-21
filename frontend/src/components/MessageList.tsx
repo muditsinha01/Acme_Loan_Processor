@@ -2,14 +2,23 @@
 
 import { Message } from './ChatInterface'
 import { ErrorDisplay } from './ErrorDisplay'
+import { HitlApprovalCard } from './HitlApprovalCard'
 import { SkillWorkflowProgress } from './SkillWorkflowProgress'
 import { Paperclip } from 'lucide-react'
 
 interface MessageListProps {
   messages: Message[]
+  hitlSubmittingId?: string | null
+  onHitlApprove?: (message: Message) => void
+  onHitlReject?: (message: Message) => void
 }
 
-export function MessageList({ messages }: MessageListProps) {
+export function MessageList({
+  messages,
+  hitlSubmittingId = null,
+  onHitlApprove,
+  onHitlReject,
+}: MessageListProps) {
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-4">
       {messages.map((message) => (
@@ -27,7 +36,7 @@ export function MessageList({ messages }: MessageListProps) {
             <div
               className={`mt-1 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl ${
                 message.role === 'user'
-                  ? 'bg-slate-200 text-slate-900'
+                  ? 'bg-slate-900 text-white'
                   : 'bg-gradient-to-br from-blue-600 to-sky-400 text-white shadow-[0_8px_18px_rgba(37,99,235,0.2)]'
               }`}
             >
@@ -42,8 +51,8 @@ export function MessageList({ messages }: MessageListProps) {
               <div
                 className={`overflow-hidden rounded-[24px] border px-5 py-4 shadow-[0_18px_50px_rgba(2,6,23,0.18)] ${
                   message.role === 'user'
-                    ? 'border-slate-700 bg-slate-100 text-slate-900'
-                    : 'border-slate-700 bg-slate-900 text-slate-100 shadow-[0_12px_30px_rgba(2,6,23,0.28)]'
+                    ? 'border-slate-900 bg-slate-900 text-white'
+                    : 'border-slate-200 bg-white text-slate-900 shadow-[0_12px_30px_rgba(148,163,184,0.14)]'
                 }`}
               >
               {message.attachments && message.attachments.length > 0 && (
@@ -53,8 +62,8 @@ export function MessageList({ messages }: MessageListProps) {
                       key={attachment.id}
                         className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm ${
                           message.role === 'user'
-                            ? 'border-slate-300 bg-white text-slate-700'
-                            : 'border-slate-700 bg-slate-800 text-slate-300'
+                            ? 'border-slate-700 bg-slate-800 text-slate-100'
+                            : 'border-slate-200 bg-slate-50 text-slate-600'
                         }`}
                     >
                         <Paperclip className="h-4 w-4 opacity-70" />
@@ -73,9 +82,24 @@ export function MessageList({ messages }: MessageListProps) {
                 <SkillWorkflowProgress
                   stages={message.workflowStages}
                   skillName={message.skillInvocation?.name}
+                  skillVersion={message.skillInvocation?.version}
                   skillDescription={message.skillInvocation?.description}
                   isComplete={message.workflowComplete}
+                  workflowStatus={message.workflowStatus}
                 />
+              ) : message.kind === 'hitl_approval' && message.hitlRequest ? (
+                <div className="space-y-4">
+                  <div className="message-content whitespace-pre-wrap text-sm sm:text-[15px]">
+                    {message.content}
+                  </div>
+                  <HitlApprovalCard
+                    hitl={message.hitlRequest}
+                    originalMessage={message.originalUserMessage || ''}
+                    isSubmitting={hitlSubmittingId === message.id}
+                    onApprove={() => onHitlApprove?.(message)}
+                    onReject={() => onHitlReject?.(message)}
+                  />
+                </div>
               ) : (
                   <div className="message-content whitespace-pre-wrap text-sm sm:text-[15px]">{message.content}</div>
               )}
