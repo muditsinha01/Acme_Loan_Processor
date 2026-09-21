@@ -134,7 +134,10 @@ class RateCheckAgent(AcmeLoanAgentFramework):
                 },
             ],
             temperature=0.2,
-            max_tokens=220,
+            # deepseek-r1 is a reasoning model: it spends completion tokens on a
+            # hidden reasoning pass first, so a small budget yields empty content
+            # (finish_reason=length). Give it headroom for reasoning + answer.
+            max_tokens=900,
         )
         _lineaje_payload = "Rate check LLM response"
         # LINEAJE: enforce() `_lineaje_payload` at agent->log log_emit — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.). Mask/block; do not remove without review. site_id='site:sha256:0cb9e2b33fbd67836f82b560578a5c2f4052b3d2c840e150c54d990051d41287'
