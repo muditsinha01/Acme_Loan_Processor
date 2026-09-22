@@ -26,7 +26,7 @@ jobs:
       - name: Prepare scanner
         run: |
           # Preserve the scanner before removing .github from scan input
-          cp .github/scm_unifai_scan.py /tmp/scm_unifai_scan.py
+          cp .github/gha_repo_scan.py /tmp/gha_repo_scan.py
 
           # Exclude GitHub config/workflows/scripts and git internals from the scan
           rm -rf .github .git
