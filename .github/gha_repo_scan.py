@@ -5,12 +5,14 @@ This file is the **standalone** script the GitHub Action copies into the
 runner (``.lineaje-scanner/scripts/gha_repo_scan.py``). The rest of
 ``aipo_mcp_server`` is not present there — do not import ``scm_client``,
 ``config``, ``mcp_server``, ``adapter``, ``pipeline``, ``gha_stub_insertion``,
-``insertion_point_scanner``, or anything else from this repo. Stdlib only
-(plus the ``mcp`` client package). Stub insertions come from the MCP
+``insertion_point_scanner``, or anything else from this repo. Everything this
+script needs from ``config.py`` is inlined below rather than imported. Stdlib
+only (plus the ``mcp`` client package). Stub insertions come from the MCP
 response and are applied with stdlib. Skip reasons are logged. When this
 checkout also has the pipeline package (local aipo_mcp_server runs),
 violation files the hosted MCP missed are scanned locally and added to
-the PR.
+the PR (best-effort ``ImportError``-guarded import — see
+``_supplement_stubs_from_local_pipeline``).
 
 Scans already-checked-out source code against Lineaje AI security policies
 and prints results as structured JSON to stdout. Designed to run on a
@@ -81,19 +83,234 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 logger = logging.getLogger("gha_repo_scan")
 
-_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if _REPO_ROOT not in sys.path:
-    sys.path.insert(0, _REPO_ROOT)
-from config import (  # noqa: E402
-    ARCHIVE_EXCLUDE_DIRS,
-    ARCHIVE_EXCLUDE_GLOBS,
-    BINARY_EXTENSIONS,
-    EVIDENCE_TYPE_SCM_SCAN,
-    _ARCHIVE_EXCLUDE_DIR_GLOBS,
-    archive_exclude_globs_keeping_manifests,
-    pin_manifests_to_first_batch,
-    split_batch_keeping_manifests_whole,
+# ===========================================================================
+# Inlined from config.py — this script must not import it (or anything else
+# from aipo_mcp_server); see module docstring.
+# ===========================================================================
+
+EVIDENCE_TYPE_SCM_SCAN = "scm_scan"
+
+MANIFEST_FILE_PATTERNS: frozenset = frozenset(
+    {
+        "requirements.txt",
+        "Pipfile", "pyproject.toml", "setup.py", "setup.cfg",
+        "*.toml",
+        "environment.yml", "environment.yaml",
+        "poetry.lock", "Pipfile.lock",
+        "package.json",
+        "yarn.lock",
+        "pom.xml", "project.xml", "build.gradle", "build.gradle.kts", "build.gradle.mustache",
+        "build.sbt",
+        "Gemfile",
+        "go.mod",
+        "Cargo.toml",
+        "packages.config", "*.csproj", "*.fsproj",
+        "*.vbproj", "nuget.config", "Directory.Packages.props",
+        "*.sln", "*.slnx",
+        "vcpkg.json", ".vcpkg-root",
+        "composer.json",
+        "Package.swift",
+        "pubspec.yaml",
+        "mix.exs",
+        "*.gemspec",
+        "config.json",
+    }
 )
+
+LOCKFILE_BASENAMES: frozenset = frozenset(
+    {
+        "bun.lockb",
+        "flake.lock",
+        "package-lock.json",
+        "pnpm-lock.yaml",
+        "bun.lock",
+        "gradle.lockfile",
+        "Gemfile.lock",
+        "go.sum",
+        "Cargo.lock",
+        "composer.lock",
+        "Package.resolved",
+        "pubspec.lock",
+        "mix.lock",
+        "packages.lock.json",
+    }
+)
+
+_MANIFEST_LOCKFILE_EXCEPTIONS: frozenset = frozenset({"yarn.lock", "poetry.lock", "Pipfile.lock"})
+
+
+def is_lockfile_basename(name: str) -> bool:
+    """True for dependency lockfiles — never CLI, package discovery, or eval.
+
+    yarn.lock / poetry.lock / Pipfile.lock are exceptions: treated as
+    manifests (see _MANIFEST_LOCKFILE_EXCEPTIONS), not lockfiles, despite
+    matching the generic ``.lock`` suffix rule below.
+    """
+    if not name:
+        return False
+    base = os.path.basename(str(name))
+    if base in _MANIFEST_LOCKFILE_EXCEPTIONS:
+        return False
+    if base in LOCKFILE_BASENAMES:
+        return True
+    lower = base.lower()
+    if lower in {n.lower() for n in _MANIFEST_LOCKFILE_EXCEPTIONS}:
+        return False
+    if lower in {n.lower() for n in LOCKFILE_BASENAMES}:
+        return True
+    if lower.endswith(".lock") or lower.endswith(".lockfile"):
+        return True
+    if lower.endswith("-lock.json") or lower.endswith("-lock.yaml"):
+        return True
+    return False
+
+
+def _is_manifest_basename(name: str) -> bool:
+    """True if *name* matches ``MANIFEST_FILE_PATTERNS`` (exact or glob)."""
+    if is_lockfile_basename(name):
+        return False
+    if name in MANIFEST_FILE_PATTERNS:
+        return True
+    return any(
+        fnmatch.fnmatch(name, pat)
+        for pat in MANIFEST_FILE_PATTERNS
+        if "*" in pat or "?" in pat
+    )
+
+
+# README / Dockerfile — docs and container-build metadata, no AI-scan value.
+_DOC_AND_BUILD_NAME_PREFIXES = ("readme", "dockerfile")
+_DOC_AND_BUILD_EXACT_NAMES: frozenset = frozenset({".dockerignore"})
+_DOC_AND_BUILD_SUFFIXES = (".dockerfile",)
+
+
+def _doc_and_build_fnmatch_globs() -> frozenset:
+    """Leading+trailing-``*`` patterns for ``fnmatch`` against a full rel path
+    (matches root-level and nested alike) — for ``ARCHIVE_EXCLUDE_GLOBS``."""
+    patterns: set = {f"*{suffix}" for suffix in _DOC_AND_BUILD_SUFFIXES}
+    patterns.update(f"*{name}" for name in _DOC_AND_BUILD_EXACT_NAMES)
+    for prefix in _DOC_AND_BUILD_NAME_PREFIXES:
+        for variant in (prefix, prefix.capitalize(), prefix.upper()):
+            patterns.add(f"*{variant}*")
+    return frozenset(patterns)
+
+
+ARCHIVE_EXCLUDE_DIRS: frozenset = frozenset(
+    {
+        # VCS
+        ".git", ".gitignore", ".gitattributes", ".gitmodules", ".hg", ".svn",
+        # Secrets / local config
+        ".env", ".env.local", ".env.development", ".env.production",
+        # Python
+        "__pycache__", ".pytest_cache", "venv", ".venv", ".venv-scan", "env", ".tox",
+        "htmlcov", ".coverage", ".mypy_cache", ".ruff_cache",
+        # JS/TS
+        "node_modules", ".yarn", ".pnp",
+        # Build outputs
+        "dist", "build", ".next", ".nuxt", "out", "coverage", ".cache",
+        # Java / Kotlin
+        "target", ".gradle", ".m2",
+        # Mobile
+        "Pods", ".expo",
+        # IDE
+        ".idea", ".vscode",
+        # Lineaje internal (scanner cache) and customer-runtime config written by stub insertion
+        ".lineaje-aiepo-security",
+        ".lineaje",
+        # Migrations (often thousands of files, not AI-relevant)
+        "migrations", "alembic",
+    }
+)
+
+ARCHIVE_EXCLUDE_GLOBS: frozenset = frozenset(
+    {
+        "*.secret", "*.key", "*.pem", "*.env.*",
+        "*.zip", "*.tar", "*.tar.gz", "*.jar", "*.war", "*.swp", "*.swo",
+        # Lock files (large, machine-generated, not AI-relevant)
+        "*.lock", "package-lock.json", "yarn.lock", "Pipfile.lock",
+        "poetry.lock", "Gemfile.lock", "Cargo.lock", "composer.lock",
+        # Minified / compiled front-end assets
+        "*.min.js", "*.min.css", "*.map",
+        # Generated protocol-buffer / gRPC stubs
+        "*_pb2.py", "*.pb.go", "*.pb.cc", "*.pb.h",
+        # Test snapshots / fixtures that are large blobs
+        "*.snap",
+    } | _doc_and_build_fnmatch_globs()
+)
+
+BINARY_EXTENSIONS: frozenset = frozenset(
+    {
+        ".png", ".jpg", ".jpeg", ".gif", ".ico", ".bmp", ".webp", ".svg",
+        ".woff", ".woff2", ".ttf", ".eot", ".otf",
+        ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
+        ".zip", ".tar", ".gz", ".bz2", ".7z", ".rar",
+        ".exe", ".dll", ".so", ".dylib", ".class", ".jar", ".war",
+        ".pyc", ".pyo", ".o", ".a",
+        ".mp3", ".mp4", ".avi", ".mov", ".wav", ".flac",
+        ".db", ".sqlite", ".sqlite3",
+    }
+)
+
+# Extra directory globs used by scanners (not exact names in ARCHIVE_EXCLUDE_DIRS).
+_ARCHIVE_EXCLUDE_DIR_GLOBS = (".venv-*", "venv-*")
+
+
+def archive_exclude_globs_keeping_manifests() -> tuple:
+    """``ARCHIVE_EXCLUDE_GLOBS`` minus patterns that would drop primary manifests.
+
+    Lockfile globs stay in ``ARCHIVE_EXCLUDE_GLOBS`` — lockfiles are never
+    packed, CLI-uploaded, package-scanned, or eval'd.
+    """
+    skip = set(MANIFEST_FILE_PATTERNS)
+    return tuple(sorted(g for g in ARCHIVE_EXCLUDE_GLOBS if g not in skip))
+
+
+def pin_manifests_to_first_batch(
+    file_list: List[str],
+    batch_size: int,
+) -> Tuple[List[List[str]], List[str], List[str]]:
+    """Split *file_list* so every primary dependency manifest rides in batch 1.
+
+    Lockfiles are dropped entirely (never CLI, package discovery, or eval).
+    Code files fill the rest of batch 1 (up to *batch_size* code files) and all
+    later batches. Manifests are never dropped and never spread across batches —
+    CLI Integration / veeCLI runs against the first batch only.
+    """
+    if batch_size <= 0:
+        batch_size = max(1, len(file_list) or 1)
+    file_list = [f for f in file_list if not is_lockfile_basename(os.path.basename(f))]
+    manifests = [f for f in file_list if _is_manifest_basename(os.path.basename(f))]
+    code = [f for f in file_list if not _is_manifest_basename(os.path.basename(f))]
+    code_batches = [code[i : i + batch_size] for i in range(0, len(code), batch_size)]
+    if not code_batches:
+        return ([manifests] if manifests else []), code, manifests
+    first = list(manifests)
+    seen = set(first)
+    for f in code_batches[0]:
+        if f not in seen:
+            first.append(f)
+            seen.add(f)
+    return [first, *code_batches[1:]], code, manifests
+
+
+def split_batch_keeping_manifests_whole(
+    batch_files: List[str],
+) -> Optional[Tuple[List[str], List[str]]]:
+    """Split a 413-retry batch without chopping primary manifests across halves.
+
+    Manifests stay together, complete, in the first half. Returns ``None`` when
+    the list cannot be split (fewer than two files, or manifests-only).
+    """
+    if len(batch_files) < 2:
+        return None
+    manifests = [f for f in batch_files if _is_manifest_basename(os.path.basename(f))]
+    code = [f for f in batch_files if not _is_manifest_basename(os.path.basename(f))]
+    if not code:
+        return None
+    if len(code) == 1:
+        return (manifests, code) if manifests else None
+    mid = len(code) // 2
+    return manifests + code[:mid], code[mid:]
 
 
 def _git_ls_files_archive_command(repo_path: str) -> List[str]:
