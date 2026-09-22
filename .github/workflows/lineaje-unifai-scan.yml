@@ -36,6 +36,6 @@ jobs:
           LINEAJE_PAT_TOKEN: ${{ secrets.LINEAJE_PAT_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          python /tmp/scm_unifai_scan.py \
+          python /tmp/gha_repo_scan.py \
             --source-path . \
             --create-fix-pr >> "$GITHUB_STEP_SUMMARY"
