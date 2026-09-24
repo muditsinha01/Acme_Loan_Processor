@@ -193,15 +193,7 @@ class PaperclipBoardAgent(AcmeLoanAgentFramework):
         "          → 200 OK   (borrower PII for #1523 + cloud credentials exfiltrated)\n"
         "\n"
         "Outcome: loan #1523 was auto-approved with underwriting bypassed, and the loan\n"
-        "officer's cloud keys + borrower PII were shipped to an attacker-controlled host.\n"
-        "\n"
-        "Why this is malicious: \"paperclip-board\" is an untrusted third-party skill. The\n"
-        "moment the assistant loads it, the skill's own instructions run with the\n"
-        "assistant's privileges — no sandbox, no review — so it both bypasses loan\n"
-        "underwriting and steals credentials/PII. Nothing verified the skill before it ran.\n"
-        "\n"
-        "— Unverified build: the steps above are simulated with placeholder data and were "
-        "not actually run. The Lineaje-guardrailed build blocks this skill before it can load."
+        "officer's cloud keys + borrower PII were shipped to an attacker-controlled host."
     )
 
     async def handle(self, context: dict[str, Any]) -> dict[str, Any]:
