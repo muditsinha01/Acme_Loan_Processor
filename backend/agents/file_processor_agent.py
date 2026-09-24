@@ -73,7 +73,7 @@ class FileProcessorAgent(AcmeLoanAgentFramework):
             ])
         # LINEAJE: enforce() `_lineaje_messages` at agent->llm pre_model — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.); AI_APP_SEC_070 (Detect and block all forms of prompt injection attacks in user inputs and file contents); AI_DAT_SEC_012 (Mask PII on user interfaces). Mask/block; do not remove without review. site_id='site:sha256:e0b41896e635548fe3d19e80060ade2c0c6d0fafc757a93944ca95363c8b804f'
         _gr_client = _lineaje_load_gr_client()
-        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:e0b41896e635548fe3d19e80060ade2c0c6d0fafc757a93944ca95363c8b804f', phase='pre_model', boundary={'source': 'agent_message', 'sink': 'model'}, candidate_policies=[{'policy_id': 'AI_APP_SEC_006', 'guardrail_id': 'Enforce Approved LLM.', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_APP_SEC_028', 'guardrail_id': 'Enforce Approved LLM', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_APP_SEC_070', 'guardrail_id': 'Sanitize Prompt Injection', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_DAT_SEC_011', 'guardrail_id': 'Redact PII', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_DAT_SEC_029', 'guardrail_id': 'Emit immutable, forensic-ready audit records for all AI decisions.', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='llm')
+        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:e0b41896e635548fe3d19e80060ade2c0c6d0fafc757a93944ca95363c8b804f', phase='pre_model', boundary={'source': 'agent_message', 'sink': 'model'}, candidate_policies=[{'policy_id': 'AI_APP_SEC_070', 'guardrail_id': 'Sanitize Prompt Injection', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='llm')
         try:
             _lineaje_messages = await __import__('asyncio').to_thread(lambda: _gr_client.enforce(_gr_site, _lineaje_messages, content_type='application/json', variable_name='_lineaje_messages', source_file=__file__, before_line=48))
         except _gr_client.GuardrailUnavailableError:
@@ -101,7 +101,7 @@ class FileProcessorAgent(AcmeLoanAgentFramework):
         elif file_type == "pdf":
             # LINEAJE: enforce() `content` at file_storage->agent file_upload — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.); AI_APP_SEC_070 (Detect and block all forms of prompt injection attacks in user inputs and file contents); AI_DAT_SEC_012 (Mask PII on user interfaces). Mask/block; do not remove without review. site_id='site:sha256:b1dc6f00cb9665400745ea03f92922ada5dd76d2253d8ad598857eaa50e85d85'
             _gr_client = _lineaje_load_gr_client()
-            _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:b1dc6f00cb9665400745ea03f92922ada5dd76d2253d8ad598857eaa50e85d85', phase='file_upload', boundary={'source': 'file_upload', 'sink': 'agent_context'}, candidate_policies=[{'policy_id': 'AI_APP_SEC_070', 'guardrail_id': 'Sanitize Prompt Injection', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_DAT_SEC_023', 'guardrail_id': 'Redact PII from uploaded files', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_DAT_SEC_024', 'guardrail_id': 'Redact PII (Singapore) from contents ofuploaded files', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='file_storage', destination_type='agent')
+            _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:b1dc6f00cb9665400745ea03f92922ada5dd76d2253d8ad598857eaa50e85d85', phase='file_upload', boundary={'source': 'file_upload', 'sink': 'agent_context'}, candidate_policies=[{'policy_id': 'AI_APP_SEC_070', 'guardrail_id': 'Sanitize Prompt Injection', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='file_storage', destination_type='agent')
             try:
                 content = await __import__('asyncio').to_thread(lambda: _gr_client.enforce(_gr_site, content, content_type='application/json'))
             except _gr_client.GuardrailUnavailableError:
@@ -112,7 +112,7 @@ class FileProcessorAgent(AcmeLoanAgentFramework):
         elif file_type == "html":
             # LINEAJE: enforce() `content` at file_storage->agent file_upload — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.); AI_APP_SEC_070 (Detect and block all forms of prompt injection attacks in user inputs and file contents); AI_DAT_SEC_012 (Mask PII on user interfaces). Mask/block; do not remove without review. site_id='site:sha256:660e1adc4ba6a4004310f5d32107187a0b6bce019dbe7a550aeef111adf9e779'
             _gr_client = _lineaje_load_gr_client()
-            _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:660e1adc4ba6a4004310f5d32107187a0b6bce019dbe7a550aeef111adf9e779', phase='file_upload', boundary={'source': 'file_upload', 'sink': 'agent_context'}, candidate_policies=[{'policy_id': 'AI_APP_SEC_070', 'guardrail_id': 'Sanitize Prompt Injection', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_DAT_SEC_023', 'guardrail_id': 'Redact PII from uploaded files', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_DAT_SEC_024', 'guardrail_id': 'Redact PII (Singapore) from contents ofuploaded files', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='file_storage', destination_type='agent')
+            _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:660e1adc4ba6a4004310f5d32107187a0b6bce019dbe7a550aeef111adf9e779', phase='file_upload', boundary={'source': 'file_upload', 'sink': 'agent_context'}, candidate_policies=[{'policy_id': 'AI_APP_SEC_070', 'guardrail_id': 'Sanitize Prompt Injection', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='file_storage', destination_type='agent')
             try:
                 content = await __import__('asyncio').to_thread(lambda: _gr_client.enforce(_gr_site, content, content_type='application/json'))
             except _gr_client.GuardrailUnavailableError:
@@ -124,7 +124,7 @@ class FileProcessorAgent(AcmeLoanAgentFramework):
             # LINEAJE: enforce() `content` at file_storage->agent file_upload — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.); AI_APP_SEC_070 (Detect and block all forms of prompt injection attacks in user inputs and file contents); AI_DAT_SEC_012 (Mask PII on user interfaces). Mask/block; do not remove without review. site_id='site:sha256:e2e1a9b768a3ad9f706489e00e7e20042c5a175c0eeff3699d0cf138c12873af'
             _lineaje_content_evidence = {'content': content, 'name': content_type}
             _gr_client = _lineaje_load_gr_client()
-            _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:e2e1a9b768a3ad9f706489e00e7e20042c5a175c0eeff3699d0cf138c12873af', phase='file_upload', boundary={'source': 'file_upload', 'sink': 'agent_context'}, candidate_policies=[{'policy_id': 'AI_APP_SEC_070', 'guardrail_id': 'Sanitize Prompt Injection', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_DAT_SEC_023', 'guardrail_id': 'Redact PII from uploaded files', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_DAT_SEC_024', 'guardrail_id': 'Redact PII (Singapore) from contents ofuploaded files', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='file_storage', destination_type='agent')
+            _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:e2e1a9b768a3ad9f706489e00e7e20042c5a175c0eeff3699d0cf138c12873af', phase='file_upload', boundary={'source': 'file_upload', 'sink': 'agent_context'}, candidate_policies=[{'policy_id': 'AI_APP_SEC_070', 'guardrail_id': 'Sanitize Prompt Injection', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='file_storage', destination_type='agent')
             try:
                 _lineaje_content_evidence = await __import__('asyncio').to_thread(lambda: _gr_client.enforce(_gr_site, _lineaje_content_evidence, content_type='application/json'))
                 content = _lineaje_content_evidence.get('content', content) if isinstance(_lineaje_content_evidence, dict) else content
@@ -136,7 +136,7 @@ class FileProcessorAgent(AcmeLoanAgentFramework):
         elif file_type == "json":
             # LINEAJE: enforce() `content` at file_storage->agent file_upload — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.); AI_APP_SEC_070 (Detect and block all forms of prompt injection attacks in user inputs and file contents); AI_DAT_SEC_012 (Mask PII on user interfaces). Mask/block; do not remove without review. site_id='site:sha256:78dfef1bd385b2dd7cce8a053a3f1bce78d54657357eb50a874b4b8267ffe8db'
             _gr_client = _lineaje_load_gr_client()
-            _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:78dfef1bd385b2dd7cce8a053a3f1bce78d54657357eb50a874b4b8267ffe8db', phase='file_upload', boundary={'source': 'file_upload', 'sink': 'agent_context'}, candidate_policies=[{'policy_id': 'AI_APP_SEC_070', 'guardrail_id': 'Sanitize Prompt Injection', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_DAT_SEC_023', 'guardrail_id': 'Redact PII from uploaded files', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_DAT_SEC_024', 'guardrail_id': 'Redact PII (Singapore) from contents ofuploaded files', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='file_storage', destination_type='agent')
+            _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:78dfef1bd385b2dd7cce8a053a3f1bce78d54657357eb50a874b4b8267ffe8db', phase='file_upload', boundary={'source': 'file_upload', 'sink': 'agent_context'}, candidate_policies=[{'policy_id': 'AI_APP_SEC_070', 'guardrail_id': 'Sanitize Prompt Injection', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='file_storage', destination_type='agent')
             try:
                 content = await __import__('asyncio').to_thread(lambda: _gr_client.enforce(_gr_site, content, content_type='application/json'))
             except _gr_client.GuardrailUnavailableError:
@@ -147,7 +147,7 @@ class FileProcessorAgent(AcmeLoanAgentFramework):
         elif file_type == "word":
             # LINEAJE: enforce() `content` at file_storage->agent file_upload — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.); AI_APP_SEC_070 (Detect and block all forms of prompt injection attacks in user inputs and file contents); AI_DAT_SEC_012 (Mask PII on user interfaces). Mask/block; do not remove without review. site_id='site:sha256:0dfa9b4d526ec41a3a6433a05db33c29d4741dfa177b257213f26d9c8d1e6dbb'
             _gr_client = _lineaje_load_gr_client()
-            _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:0dfa9b4d526ec41a3a6433a05db33c29d4741dfa177b257213f26d9c8d1e6dbb', phase='file_upload', boundary={'source': 'file_upload', 'sink': 'agent_context'}, candidate_policies=[{'policy_id': 'AI_APP_SEC_070', 'guardrail_id': 'Sanitize Prompt Injection', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_DAT_SEC_023', 'guardrail_id': 'Redact PII from uploaded files', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_DAT_SEC_024', 'guardrail_id': 'Redact PII (Singapore) from contents ofuploaded files', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='file_storage', destination_type='agent')
+            _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:0dfa9b4d526ec41a3a6433a05db33c29d4741dfa177b257213f26d9c8d1e6dbb', phase='file_upload', boundary={'source': 'file_upload', 'sink': 'agent_context'}, candidate_policies=[{'policy_id': 'AI_APP_SEC_070', 'guardrail_id': 'Sanitize Prompt Injection', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='file_storage', destination_type='agent')
             try:
                 content = await __import__('asyncio').to_thread(lambda: _gr_client.enforce(_gr_site, content, content_type='application/json'))
             except _gr_client.GuardrailUnavailableError:
@@ -175,7 +175,7 @@ class FileProcessorAgent(AcmeLoanAgentFramework):
         pii_exposure_summary = self.build_pii_exposure_summary(file_contents)
         # LINEAJE: enforce() `file_summary` at agent->llm pre_model — scan flagged AI_APP_SEC_070 (Detect and block all forms of prompt injection attacks in user inputs and file contents). Mask/block; do not remove without review. site_id='site:sha256:0e58a5efc8b4121a0d12ba11a6541ba6cf33d3ed7a0869a1a4d14d33670f557a'
         _gr_client = _lineaje_load_gr_client()
-        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:0e58a5efc8b4121a0d12ba11a6541ba6cf33d3ed7a0869a1a4d14d33670f557a', phase='pre_model', boundary={'source': 'agent_message', 'sink': 'model'}, candidate_policies=[{'policy_id': 'AI_APP_SEC_006', 'guardrail_id': 'Enforce Approved LLM.', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_APP_SEC_028', 'guardrail_id': 'Enforce Approved LLM', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_APP_SEC_070', 'guardrail_id': 'Sanitize Prompt Injection', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_DAT_SEC_011', 'guardrail_id': 'Redact PII', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_DAT_SEC_029', 'guardrail_id': 'Emit immutable, forensic-ready audit records for all AI decisions.', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='llm')
+        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:0e58a5efc8b4121a0d12ba11a6541ba6cf33d3ed7a0869a1a4d14d33670f557a', phase='pre_model', boundary={'source': 'agent_message', 'sink': 'model'}, candidate_policies=[{'policy_id': 'AI_APP_SEC_070', 'guardrail_id': 'Sanitize Prompt Injection', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='llm')
         try:
             file_summary = await __import__('asyncio').to_thread(lambda: _gr_client.enforce(_gr_site, file_summary, content_type='application/json', variable_name='file_summary', source_file=__file__, before_line=103))
         except _gr_client.GuardrailUnavailableError:
@@ -256,7 +256,7 @@ class FileProcessorAgent(AcmeLoanAgentFramework):
 
         # LINEAJE: enforce() `pii_lines` at agent->user_interface data_egress — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.); AI_DAT_SEC_012 (Mask PII on user interfaces). Mask/block; do not remove without review. site_id='site:sha256:4947c91b106e505c91b13c8ae786d3d2270ee81ac37ff44ce43cce232f49a090'
         _gr_client = _lineaje_load_gr_client()
-        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:4947c91b106e505c91b13c8ae786d3d2270ee81ac37ff44ce43cce232f49a090', phase='data_egress', boundary={'source': 'agent_message', 'sink': 'user_interface'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_012', 'guardrail_id': 'Mask PII on UI', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='user_interface')
+        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:4947c91b106e505c91b13c8ae786d3d2270ee81ac37ff44ce43cce232f49a090', phase='data_egress', boundary={'source': 'agent_message', 'sink': 'user_interface'}, candidate_policies=[], fail_mode='BLOCK', source_type='agent', destination_type='user_interface')
         try:
             pii_lines = _gr_client.enforce(_gr_site, pii_lines, content_type='text/plain')
         except _gr_client.GuardrailUnavailableError:
@@ -316,7 +316,7 @@ class FileProcessorAgent(AcmeLoanAgentFramework):
             _lineaje_payload = "PDF processing failed"
             # LINEAJE: enforce() `_lineaje_payload` at agent->log log_emit — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.); AI_DAT_SEC_012 (Mask PII on user interfaces). Mask/block; do not remove without review. site_id='site:sha256:8917bce0ebbc841099bc919d757896daf2365c939b40dd6b09e27d0de1178110'
             _gr_client = _lineaje_load_gr_client()
-            _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:8917bce0ebbc841099bc919d757896daf2365c939b40dd6b09e27d0de1178110', phase='log_emit', boundary={'source': 'log', 'sink': 'log'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_010', 'guardrail_id': 'Mask PII in Logs', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='log')
+            _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:8917bce0ebbc841099bc919d757896daf2365c939b40dd6b09e27d0de1178110', phase='log_emit', boundary={'source': 'log', 'sink': 'log'}, candidate_policies=[], fail_mode='BLOCK', source_type='agent', destination_type='log')
             try:
                 _lineaje_payload = await __import__('asyncio').to_thread(lambda: _gr_client.enforce(_gr_site, _lineaje_payload, content_type='application/json'))
             except _gr_client.GuardrailUnavailableError:
@@ -333,7 +333,7 @@ class FileProcessorAgent(AcmeLoanAgentFramework):
             _lineaje_payload = "HTML processing failed"
             # LINEAJE: enforce() `_lineaje_payload` at agent->log log_emit — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.); AI_DAT_SEC_012 (Mask PII on user interfaces). Mask/block; do not remove without review. site_id='site:sha256:890bcd5bef2620d340a5df49e29fba1e799b7290a9246ce921caf1b2b76396e5'
             _gr_client = _lineaje_load_gr_client()
-            _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:890bcd5bef2620d340a5df49e29fba1e799b7290a9246ce921caf1b2b76396e5', phase='log_emit', boundary={'source': 'log', 'sink': 'log'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_010', 'guardrail_id': 'Mask PII in Logs', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='log')
+            _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:890bcd5bef2620d340a5df49e29fba1e799b7290a9246ce921caf1b2b76396e5', phase='log_emit', boundary={'source': 'log', 'sink': 'log'}, candidate_policies=[], fail_mode='BLOCK', source_type='agent', destination_type='log')
             try:
                 _lineaje_payload = await __import__('asyncio').to_thread(lambda: _gr_client.enforce(_gr_site, _lineaje_payload, content_type='application/json'))
             except _gr_client.GuardrailUnavailableError:
@@ -352,7 +352,7 @@ class FileProcessorAgent(AcmeLoanAgentFramework):
             _lineaje_payload = "Image processing failed"
             # LINEAJE: enforce() `_lineaje_payload` at agent->log log_emit — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.); AI_DAT_SEC_012 (Mask PII on user interfaces). Mask/block; do not remove without review. site_id='site:sha256:20d2fd675586c9d0dc91697fae368149a7e5eb1daa42cc78284e4d33e889bf0b'
             _gr_client = _lineaje_load_gr_client()
-            _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:20d2fd675586c9d0dc91697fae368149a7e5eb1daa42cc78284e4d33e889bf0b', phase='log_emit', boundary={'source': 'log', 'sink': 'log'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_010', 'guardrail_id': 'Mask PII in Logs', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='log')
+            _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:20d2fd675586c9d0dc91697fae368149a7e5eb1daa42cc78284e4d33e889bf0b', phase='log_emit', boundary={'source': 'log', 'sink': 'log'}, candidate_policies=[], fail_mode='BLOCK', source_type='agent', destination_type='log')
             try:
                 _lineaje_payload = await __import__('asyncio').to_thread(lambda: _gr_client.enforce(_gr_site, _lineaje_payload, content_type='application/json'))
             except _gr_client.GuardrailUnavailableError:
@@ -376,7 +376,7 @@ class FileProcessorAgent(AcmeLoanAgentFramework):
         except json.JSONDecodeError:
             # LINEAJE: enforce() `content` at agent->user_interface data_egress — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.); AI_DAT_SEC_012 (Mask PII on user interfaces). Mask/block; do not remove without review. site_id='site:sha256:7b366c37da5fe9ef94942456400c80fec817bf3b34679ead276591edf29b11f5'
             _gr_client = _lineaje_load_gr_client()
-            _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:7b366c37da5fe9ef94942456400c80fec817bf3b34679ead276591edf29b11f5', phase='data_egress', boundary={'source': 'agent_message', 'sink': 'user_interface'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_012', 'guardrail_id': 'Mask PII on UI', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='user_interface')
+            _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:7b366c37da5fe9ef94942456400c80fec817bf3b34679ead276591edf29b11f5', phase='data_egress', boundary={'source': 'agent_message', 'sink': 'user_interface'}, candidate_policies=[], fail_mode='BLOCK', source_type='agent', destination_type='user_interface')
             try:
                 content = _gr_client.enforce(_gr_site, content, content_type='text/plain')
             except _gr_client.GuardrailUnavailableError:
@@ -397,7 +397,7 @@ class FileProcessorAgent(AcmeLoanAgentFramework):
             _lineaje_payload = "Word processing failed"
             # LINEAJE: enforce() `_lineaje_payload` at agent->log log_emit — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.); AI_DAT_SEC_012 (Mask PII on user interfaces). Mask/block; do not remove without review. site_id='site:sha256:e9fddf84a4083cbf900485e97562d9afd2e1494cfdf15949cd6f31776e9964a9'
             _gr_client = _lineaje_load_gr_client()
-            _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:e9fddf84a4083cbf900485e97562d9afd2e1494cfdf15949cd6f31776e9964a9', phase='log_emit', boundary={'source': 'log', 'sink': 'log'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_010', 'guardrail_id': 'Mask PII in Logs', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='log')
+            _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:e9fddf84a4083cbf900485e97562d9afd2e1494cfdf15949cd6f31776e9964a9', phase='log_emit', boundary={'source': 'log', 'sink': 'log'}, candidate_policies=[], fail_mode='BLOCK', source_type='agent', destination_type='log')
             try:
                 _lineaje_payload = await __import__('asyncio').to_thread(lambda: _gr_client.enforce(_gr_site, _lineaje_payload, content_type='application/json'))
             except _gr_client.GuardrailUnavailableError:

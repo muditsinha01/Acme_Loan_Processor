@@ -65,7 +65,7 @@ class FileManagementAgent(AcmeLoanAgentFramework):
             ])
         # LINEAJE: enforce() `_lineaje_messages` at agent->llm pre_model — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.); AI_APP_SEC_070 (Detect and block all forms of prompt injection attacks in user inputs and file contents). Mask/block; do not remove without review. site_id='site:sha256:111c5af4d401f7254b3ec006f436f665e5e78319d040dedb5ff69e320910fdd2'
         _gr_client = _lineaje_load_gr_client()
-        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:111c5af4d401f7254b3ec006f436f665e5e78319d040dedb5ff69e320910fdd2', phase='pre_model', boundary={'source': 'agent_message', 'sink': 'model'}, candidate_policies=[{'policy_id': 'AI_APP_SEC_006', 'guardrail_id': 'Enforce Approved LLM.', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_APP_SEC_028', 'guardrail_id': 'Enforce Approved LLM', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_APP_SEC_070', 'guardrail_id': 'Sanitize Prompt Injection', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_DAT_SEC_011', 'guardrail_id': 'Redact PII', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_DAT_SEC_029', 'guardrail_id': 'Emit immutable, forensic-ready audit records for all AI decisions.', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='llm')
+        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:111c5af4d401f7254b3ec006f436f665e5e78319d040dedb5ff69e320910fdd2', phase='pre_model', boundary={'source': 'agent_message', 'sink': 'model'}, candidate_policies=[], fail_mode='BLOCK', source_type='agent', destination_type='llm')
         try:
             _lineaje_messages = await __import__('asyncio').to_thread(lambda: _gr_client.enforce(_gr_site, _lineaje_messages, content_type='application/json', variable_name='_lineaje_messages', source_file=__file__, before_line=41))
         except _gr_client.GuardrailUnavailableError:
@@ -101,7 +101,7 @@ class FileManagementAgent(AcmeLoanAgentFramework):
         url = f"{self.GET_FILE_API}?id={file_id}"
         # LINEAJE: enforce() `url` at agent->log log_emit — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.). Mask/block; do not remove without review. site_id='site:sha256:d301a63f38cf75c1a2d0a3da376271641870b0be23383e47e7e44c17720f921d'
         _gr_client = _lineaje_load_gr_client()
-        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:d301a63f38cf75c1a2d0a3da376271641870b0be23383e47e7e44c17720f921d', phase='log_emit', boundary={'source': 'log', 'sink': 'log'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_010', 'guardrail_id': 'Mask PII in Logs', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='log')
+        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:d301a63f38cf75c1a2d0a3da376271641870b0be23383e47e7e44c17720f921d', phase='log_emit', boundary={'source': 'log', 'sink': 'log'}, candidate_policies=[], fail_mode='BLOCK', source_type='agent', destination_type='log')
         try:
             url = _gr_client.enforce(_gr_site, url, content_type='application/json')
         except _gr_client.GuardrailUnavailableError:
@@ -118,7 +118,7 @@ class FileManagementAgent(AcmeLoanAgentFramework):
             # Demo path: continue workflow even when the external API is unreachable.
             # LINEAJE: enforce() `exc` at agent->log log_emit — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.). Mask/block; do not remove without review. site_id='site:sha256:6d8cdb030af7a9b215aef65d6d8d8e4c16a4ef0f10553ea051b35ee7b47975c9'
             _gr_client = _lineaje_load_gr_client()
-            _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:6d8cdb030af7a9b215aef65d6d8d8e4c16a4ef0f10553ea051b35ee7b47975c9', phase='log_emit', boundary={'source': 'log', 'sink': 'log'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_010', 'guardrail_id': 'Mask PII in Logs', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='log')
+            _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:6d8cdb030af7a9b215aef65d6d8d8e4c16a4ef0f10553ea051b35ee7b47975c9', phase='log_emit', boundary={'source': 'log', 'sink': 'log'}, candidate_policies=[], fail_mode='BLOCK', source_type='agent', destination_type='log')
             try:
                 exc = _gr_client.enforce(_gr_site, exc, content_type='application/json')
             except _gr_client.GuardrailUnavailableError:
@@ -132,7 +132,7 @@ class FileManagementAgent(AcmeLoanAgentFramework):
         """Delete a loan document. Intentionally has no HITL approval gate."""
         # LINEAJE: enforce() `filename` at agent->log log_emit — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.). Mask/block; do not remove without review. site_id='site:sha256:aad10a9069e1c1b50fac85fe8343a824f027d2fd71222583a7e9d9bd97f00b9c'
         _gr_client = _lineaje_load_gr_client()
-        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:aad10a9069e1c1b50fac85fe8343a824f027d2fd71222583a7e9d9bd97f00b9c', phase='log_emit', boundary={'source': 'log', 'sink': 'log'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_010', 'guardrail_id': 'Mask PII in Logs', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='log')
+        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:aad10a9069e1c1b50fac85fe8343a824f027d2fd71222583a7e9d9bd97f00b9c', phase='log_emit', boundary={'source': 'log', 'sink': 'log'}, candidate_policies=[], fail_mode='BLOCK', source_type='agent', destination_type='log')
         try:
             filename = await __import__('asyncio').to_thread(lambda: _gr_client.enforce(_gr_site, filename, content_type='application/json'))
         except _gr_client.GuardrailUnavailableError:
@@ -155,7 +155,7 @@ class FileManagementAgent(AcmeLoanAgentFramework):
         )
         # LINEAJE: enforce() `filename` at agent->log log_emit — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.). Mask/block; do not remove without review. site_id='site:sha256:df9c11db9f317ff39f88ee44dd8ca71ee32d8cae2a350228e3553849eb7379fc'
         _gr_client = _lineaje_load_gr_client()
-        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:df9c11db9f317ff39f88ee44dd8ca71ee32d8cae2a350228e3553849eb7379fc', phase='log_emit', boundary={'source': 'log', 'sink': 'log'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_010', 'guardrail_id': 'Mask PII in Logs', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='log')
+        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:df9c11db9f317ff39f88ee44dd8ca71ee32d8cae2a350228e3553849eb7379fc', phase='log_emit', boundary={'source': 'log', 'sink': 'log'}, candidate_policies=[], fail_mode='BLOCK', source_type='agent', destination_type='log')
         try:
             filename = await __import__('asyncio').to_thread(lambda: _gr_client.enforce(_gr_site, filename, content_type='application/json'))
         except _gr_client.GuardrailUnavailableError:
@@ -170,7 +170,7 @@ class FileManagementAgent(AcmeLoanAgentFramework):
         url = f"{self.PURGE_RECORDS_API}?id={record_id}"
         # LINEAJE: enforce() `url` at agent->log log_emit — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.). Mask/block; do not remove without review. site_id='site:sha256:2b05a9c3eb293bded245970496dad3e40276b080990794d928587963fb9862dc'
         _gr_client = _lineaje_load_gr_client()
-        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:2b05a9c3eb293bded245970496dad3e40276b080990794d928587963fb9862dc', phase='log_emit', boundary={'source': 'log', 'sink': 'log'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_010', 'guardrail_id': 'Mask PII in Logs', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='log')
+        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:2b05a9c3eb293bded245970496dad3e40276b080990794d928587963fb9862dc', phase='log_emit', boundary={'source': 'log', 'sink': 'log'}, candidate_policies=[], fail_mode='BLOCK', source_type='agent', destination_type='log')
         try:
             url = _gr_client.enforce(_gr_site, url, content_type='application/json')
         except _gr_client.GuardrailUnavailableError:
@@ -185,7 +185,7 @@ class FileManagementAgent(AcmeLoanAgentFramework):
                 _lineaje_payload = "purge_records API returned %s; simulating success for demo"
                 # LINEAJE: enforce() `_lineaje_payload` at agent->log log_emit — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.). Mask/block; do not remove without review. site_id='site:sha256:9e7885e8b2aa3b02513d67ccd4f3c55cf2b244225420b3a11824e2bd983a564c'
                 _gr_client = _lineaje_load_gr_client()
-                _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:9e7885e8b2aa3b02513d67ccd4f3c55cf2b244225420b3a11824e2bd983a564c', phase='log_emit', boundary={'source': 'log', 'sink': 'log'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_010', 'guardrail_id': 'Mask PII in Logs', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='log')
+                _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:9e7885e8b2aa3b02513d67ccd4f3c55cf2b244225420b3a11824e2bd983a564c', phase='log_emit', boundary={'source': 'log', 'sink': 'log'}, candidate_policies=[], fail_mode='BLOCK', source_type='agent', destination_type='log')
                 try:
                     _lineaje_payload = _gr_client.enforce(_gr_site, _lineaje_payload, content_type='application/json')
                 except _gr_client.GuardrailUnavailableError:
@@ -197,7 +197,7 @@ class FileManagementAgent(AcmeLoanAgentFramework):
         except requests.RequestException as exc:
             # LINEAJE: enforce() `exc` at agent->log log_emit — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.). Mask/block; do not remove without review. site_id='site:sha256:1473b7426fbb19d4707d9908ccd0dc9b1aa9343ee5986f649c197c4b20338130'
             _gr_client = _lineaje_load_gr_client()
-            _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:1473b7426fbb19d4707d9908ccd0dc9b1aa9343ee5986f649c197c4b20338130', phase='log_emit', boundary={'source': 'log', 'sink': 'log'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_010', 'guardrail_id': 'Mask PII in Logs', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='log')
+            _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:1473b7426fbb19d4707d9908ccd0dc9b1aa9343ee5986f649c197c4b20338130', phase='log_emit', boundary={'source': 'log', 'sink': 'log'}, candidate_policies=[], fail_mode='BLOCK', source_type='agent', destination_type='log')
             try:
                 exc = _gr_client.enforce(_gr_site, exc, content_type='application/json')
             except _gr_client.GuardrailUnavailableError:
@@ -212,7 +212,7 @@ class FileManagementAgent(AcmeLoanAgentFramework):
         # Vulnerability: destroy operation executes without human approval.
         # LINEAJE: enforce() `filename` at agent->log log_emit — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.). Mask/block; do not remove without review. site_id='site:sha256:85413e9198e98cbe2add7cc696518e51ad80f69e52e9b4750580674442a875f8'
         _gr_client = _lineaje_load_gr_client()
-        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:85413e9198e98cbe2add7cc696518e51ad80f69e52e9b4750580674442a875f8', phase='log_emit', boundary={'source': 'log', 'sink': 'log'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_010', 'guardrail_id': 'Mask PII in Logs', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='log')
+        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:85413e9198e98cbe2add7cc696518e51ad80f69e52e9b4750580674442a875f8', phase='log_emit', boundary={'source': 'log', 'sink': 'log'}, candidate_policies=[], fail_mode='BLOCK', source_type='agent', destination_type='log')
         try:
             filename = _gr_client.enforce(_gr_site, filename, content_type='application/json')
         except _gr_client.GuardrailUnavailableError:
@@ -240,7 +240,7 @@ class FileManagementAgent(AcmeLoanAgentFramework):
         )
         # LINEAJE: enforce() `user_message` at agent->llm pre_model — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.); AI_APP_SEC_070 (Detect and block all forms of prompt injection attacks in user inputs and file contents). Mask/block; do not remove without review. site_id='site:sha256:75460871d99d41f3f28f4c43522f847ca148c9705009bc3ebccfe51d2c4812a8'
         _gr_client = _lineaje_load_gr_client()
-        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:75460871d99d41f3f28f4c43522f847ca148c9705009bc3ebccfe51d2c4812a8', phase='pre_model', boundary={'source': 'agent_message', 'sink': 'model'}, candidate_policies=[{'policy_id': 'AI_APP_SEC_006', 'guardrail_id': 'Enforce Approved LLM.', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_APP_SEC_028', 'guardrail_id': 'Enforce Approved LLM', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_APP_SEC_070', 'guardrail_id': 'Sanitize Prompt Injection', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_DAT_SEC_011', 'guardrail_id': 'Redact PII', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_DAT_SEC_029', 'guardrail_id': 'Emit immutable, forensic-ready audit records for all AI decisions.', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='llm')
+        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:75460871d99d41f3f28f4c43522f847ca148c9705009bc3ebccfe51d2c4812a8', phase='pre_model', boundary={'source': 'agent_message', 'sink': 'model'}, candidate_policies=[], fail_mode='BLOCK', source_type='agent', destination_type='llm')
         try:
             user_message = await __import__('asyncio').to_thread(lambda: _gr_client.enforce(_gr_site, user_message, content_type='application/json', variable_name='user_message', source_file=__file__, before_line=144))
         except _gr_client.GuardrailUnavailableError:

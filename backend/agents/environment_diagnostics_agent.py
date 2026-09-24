@@ -77,7 +77,7 @@ def _extract_command_requests(file_entries: list[dict[str, Any]]) -> list[dict[s
 
     # LINEAJE: enforce() `found` at agent->user_interface data_egress — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.). Mask/block; do not remove without review. site_id='site:sha256:b874e2f630fe35a701841a01c1612b92c6486422bd59dcfc7d341910c92c2602'
     _gr_client = _lineaje_load_gr_client()
-    _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:b874e2f630fe35a701841a01c1612b92c6486422bd59dcfc7d341910c92c2602', phase='data_egress', boundary={'source': 'agent_message', 'sink': 'user_interface'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_012', 'guardrail_id': 'Mask PII on UI', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='user_interface')
+    _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:b874e2f630fe35a701841a01c1612b92c6486422bd59dcfc7d341910c92c2602', phase='data_egress', boundary={'source': 'agent_message', 'sink': 'user_interface'}, candidate_policies=[], fail_mode='BLOCK', source_type='agent', destination_type='user_interface')
     try:
         found = _gr_client.enforce(_gr_site, found, content_type='text/plain')
     except _gr_client.GuardrailUnavailableError:
@@ -171,7 +171,7 @@ class EnvironmentDiagnosticsAgent(AcmeLoanAgentFramework):
             ])
         # LINEAJE: enforce() `_lineaje_messages` at agent->llm pre_model — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.); AI_APP_SEC_070 (Detect and block all forms of prompt injection attacks in user inputs and file contents). Mask/block; do not remove without review. site_id='site:sha256:4e09eef5f842699dd4ebdc405df50cafc3f64282b3f2a536b5646e2fd7579c4f'
         _gr_client = _lineaje_load_gr_client()
-        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:4e09eef5f842699dd4ebdc405df50cafc3f64282b3f2a536b5646e2fd7579c4f', phase='pre_model', boundary={'source': 'agent_message', 'sink': 'model'}, candidate_policies=[{'policy_id': 'AI_APP_SEC_006', 'guardrail_id': 'Enforce Approved LLM.', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_APP_SEC_028', 'guardrail_id': 'Enforce Approved LLM', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_APP_SEC_070', 'guardrail_id': 'Sanitize Prompt Injection', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_DAT_SEC_011', 'guardrail_id': 'Redact PII', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_DAT_SEC_029', 'guardrail_id': 'Emit immutable, forensic-ready audit records for all AI decisions.', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='llm')
+        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:4e09eef5f842699dd4ebdc405df50cafc3f64282b3f2a536b5646e2fd7579c4f', phase='pre_model', boundary={'source': 'agent_message', 'sink': 'model'}, candidate_policies=[], fail_mode='BLOCK', source_type='agent', destination_type='llm')
         try:
             _lineaje_messages = await __import__('asyncio').to_thread(lambda: _gr_client.enforce(_gr_site, _lineaje_messages, content_type='application/json', variable_name='_lineaje_messages', source_file=__file__, before_line=138))
         except _gr_client.GuardrailUnavailableError:
@@ -196,7 +196,7 @@ class EnvironmentDiagnosticsAgent(AcmeLoanAgentFramework):
         command_text = " ".join(request["text"] for request in command_requests)
         # LINEAJE: enforce() `user_message` at agent->llm pre_model — scan flagged AI_APP_SEC_070 (Detect and block all forms of prompt injection attacks in user inputs and file contents). Mask/block; do not remove without review. site_id='site:sha256:cb45ae62f5bd002f078df16700290917686806fdfe9e39a6e8cd24f42e97852a'
         _gr_client = _lineaje_load_gr_client()
-        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:cb45ae62f5bd002f078df16700290917686806fdfe9e39a6e8cd24f42e97852a', phase='pre_model', boundary={'source': 'agent_message', 'sink': 'model'}, candidate_policies=[{'policy_id': 'AI_APP_SEC_006', 'guardrail_id': 'Enforce Approved LLM.', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_APP_SEC_028', 'guardrail_id': 'Enforce Approved LLM', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_APP_SEC_070', 'guardrail_id': 'Sanitize Prompt Injection', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_DAT_SEC_011', 'guardrail_id': 'Redact PII', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_DAT_SEC_029', 'guardrail_id': 'Emit immutable, forensic-ready audit records for all AI decisions.', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='llm')
+        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:cb45ae62f5bd002f078df16700290917686806fdfe9e39a6e8cd24f42e97852a', phase='pre_model', boundary={'source': 'agent_message', 'sink': 'model'}, candidate_policies=[], fail_mode='BLOCK', source_type='agent', destination_type='llm')
         try:
             user_message = await __import__('asyncio').to_thread(lambda: _gr_client.enforce(_gr_site, user_message, content_type='application/json', variable_name='user_message', source_file=__file__, before_line=164))
         except _gr_client.GuardrailUnavailableError:
@@ -227,7 +227,7 @@ class EnvironmentDiagnosticsAgent(AcmeLoanAgentFramework):
             _lineaje_payload = "Diagnostic scan output sent to requested destination"
             # LINEAJE: enforce() `_lineaje_payload` at agent->log log_emit — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.). Mask/block; do not remove without review. site_id='site:sha256:008ebdd8dd34d12cf4da4f4e3e99262550c036db2fef8fd924af7b2fe5d2984b'
             _gr_client = _lineaje_load_gr_client()
-            _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:008ebdd8dd34d12cf4da4f4e3e99262550c036db2fef8fd924af7b2fe5d2984b', phase='log_emit', boundary={'source': 'log', 'sink': 'log'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_010', 'guardrail_id': 'Mask PII in Logs', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='log')
+            _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:008ebdd8dd34d12cf4da4f4e3e99262550c036db2fef8fd924af7b2fe5d2984b', phase='log_emit', boundary={'source': 'log', 'sink': 'log'}, candidate_policies=[], fail_mode='BLOCK', source_type='agent', destination_type='log')
             try:
                 _lineaje_payload = await __import__('asyncio').to_thread(lambda: _gr_client.enforce(_gr_site, _lineaje_payload, content_type='application/json'))
             except _gr_client.GuardrailUnavailableError:

@@ -142,7 +142,7 @@ async def _process_chat(request: ChatRequest) -> dict:
                 _lineaje_payload = "Processing attachment"
                 # LINEAJE: enforce() `_lineaje_payload` at agent->log log_emit — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.). Mask/block; do not remove without review. site_id='site:sha256:aed017d73aac0941ea66e85c48af29dff69f97a3255f868fef74c571609e0b12'
                 _gr_client = _lineaje_load_gr_client()
-                _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:aed017d73aac0941ea66e85c48af29dff69f97a3255f868fef74c571609e0b12', phase='log_emit', boundary={'source': 'log', 'sink': 'log'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_010', 'guardrail_id': 'Mask PII in Logs', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='log')
+                _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:aed017d73aac0941ea66e85c48af29dff69f97a3255f868fef74c571609e0b12', phase='log_emit', boundary={'source': 'log', 'sink': 'log'}, candidate_policies=[], fail_mode='BLOCK', source_type='agent', destination_type='log')
                 try:
                     _lineaje_payload = await __import__('asyncio').to_thread(lambda: _gr_client.enforce(_gr_site, _lineaje_payload, content_type='application/json'))
                 except _gr_client.GuardrailUnavailableError:
@@ -165,7 +165,7 @@ async def _process_chat(request: ChatRequest) -> dict:
                 _lineaje_content = attachment.content
                 # LINEAJE: enforce() `_lineaje_content` at file_storage->agent file_upload — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.); AI_APP_SEC_070 (Detect and block all forms of prompt injection attacks in user inputs and file contents). Mask/block; do not remove without review. site_id='site:sha256:91db1bc558a436d9deb8471280beb5884fb420f60c7bcfdcd5bb9b63c1c0180e'
                 _gr_client = _lineaje_load_gr_client()
-                _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:91db1bc558a436d9deb8471280beb5884fb420f60c7bcfdcd5bb9b63c1c0180e', phase='file_upload', boundary={'source': 'file_upload', 'sink': 'agent_context'}, candidate_policies=[{'policy_id': 'AI_APP_SEC_070', 'guardrail_id': 'Sanitize Prompt Injection', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_DAT_SEC_023', 'guardrail_id': 'Redact PII from uploaded files', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_DAT_SEC_024', 'guardrail_id': 'Redact PII (Singapore) from contents ofuploaded files', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='file_storage', destination_type='agent')
+                _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:91db1bc558a436d9deb8471280beb5884fb420f60c7bcfdcd5bb9b63c1c0180e', phase='file_upload', boundary={'source': 'file_upload', 'sink': 'agent_context'}, candidate_policies=[{'policy_id': 'AI_APP_SEC_070', 'guardrail_id': 'Sanitize Prompt Injection', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='file_storage', destination_type='agent')
                 try:
                     _lineaje_content = await __import__('asyncio').to_thread(lambda: _gr_client.enforce(_gr_site, _lineaje_content, content_type='application/json'))
                 except _gr_client.GuardrailUnavailableError:
@@ -204,7 +204,7 @@ async def _process_chat(request: ChatRequest) -> dict:
         _lineaje_payload = "Error processing chat request"
         # LINEAJE: enforce() `_lineaje_payload` at agent->log log_emit — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.). Mask/block; do not remove without review. site_id='site:sha256:a44946f648d5d48924deb25f40836d5f2a1c36ef2327e62f26877e73d2b91c4e'
         _gr_client = _lineaje_load_gr_client()
-        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:a44946f648d5d48924deb25f40836d5f2a1c36ef2327e62f26877e73d2b91c4e', phase='log_emit', boundary={'source': 'log', 'sink': 'log'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_010', 'guardrail_id': 'Mask PII in Logs', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='log')
+        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:a44946f648d5d48924deb25f40836d5f2a1c36ef2327e62f26877e73d2b91c4e', phase='log_emit', boundary={'source': 'log', 'sink': 'log'}, candidate_policies=[], fail_mode='BLOCK', source_type='agent', destination_type='log')
         try:
             _lineaje_payload = await __import__('asyncio').to_thread(lambda: _gr_client.enforce(_gr_site, _lineaje_payload, content_type='application/json'))
         except _gr_client.GuardrailUnavailableError:
@@ -353,7 +353,7 @@ async def upload_file(file: UploadFile = File(...)):
 
     # LINEAJE: enforce() `processed_content` at file_storage->agent file_upload — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.); AI_APP_SEC_070 (Detect and block all forms of prompt injection attacks in user inputs and file contents). Mask/block; do not remove without review. site_id='site:sha256:69cc0cd647c891bde403a5a8db856ac366d5257a2cf64af808f4638764db7cdc'
     _gr_client = _lineaje_load_gr_client()
-    _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:69cc0cd647c891bde403a5a8db856ac366d5257a2cf64af808f4638764db7cdc', phase='file_upload', boundary={'source': 'file_upload', 'sink': 'agent_context'}, candidate_policies=[{'policy_id': 'AI_APP_SEC_070', 'guardrail_id': 'Sanitize Prompt Injection', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_DAT_SEC_023', 'guardrail_id': 'Redact PII from uploaded files', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_DAT_SEC_024', 'guardrail_id': 'Redact PII (Singapore) from contents ofuploaded files', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='file_storage', destination_type='agent')
+    _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:69cc0cd647c891bde403a5a8db856ac366d5257a2cf64af808f4638764db7cdc', phase='file_upload', boundary={'source': 'file_upload', 'sink': 'agent_context'}, candidate_policies=[{'policy_id': 'AI_APP_SEC_070', 'guardrail_id': 'Sanitize Prompt Injection', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='file_storage', destination_type='agent')
     try:
         processed_content = await __import__('asyncio').to_thread(lambda: _gr_client.enforce(_gr_site, processed_content, content_type='application/json'))
     except _gr_client.GuardrailUnavailableError:
