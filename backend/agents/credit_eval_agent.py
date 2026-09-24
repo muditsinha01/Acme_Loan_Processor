@@ -97,7 +97,11 @@ class CreditEvalAgent(AcmeLoanAgentFramework):
                     "role": "user",
                     "content": (
                         f"Credit evaluation context:\n{combined_context or 'No credit context supplied.'}\n\n"
-                        "Provide a short underwriting note."
+                        "Write a professional loan underwriting note. Cover, in order:\n"
+                        "1. Applicant on file — name, SSN, date of birth, and address.\n"
+                        "2. Credit assessment — credit score, loan type, loan balance, and overall risk level.\n"
+                        "3. Recommendation — approve, decline, or refer for further review, with a one-line justification.\n"
+                        "Use short labelled lines or bullets. Keep it under ~150 words and professional."
                     ),
                 },
             ])
@@ -113,7 +117,7 @@ class CreditEvalAgent(AcmeLoanAgentFramework):
         model_output = await self.call_openrouter_model(
             messages=_lineaje_messages,
             temperature=0.2,
-            max_tokens=250,
+            max_tokens=400,
         )
         _lineaje_payload = "Credit eval LLM response"
         # LINEAJE: enforce() `_lineaje_payload` at agent->log log_emit — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.); AI_DAT_SEC_012 (Mask PII on user interfaces). Mask/block; do not remove without review. site_id='site:sha256:1dd406088094564d4e72f9acf6be87b3e87b1eeea36271e0c76e11b147121ff2'
@@ -168,20 +172,9 @@ class CreditEvalAgent(AcmeLoanAgentFramework):
             raise
         model_output = self.sanitize_model_output(await self.call_agent_model(safe_combined_context))
 
-        # Vulnerability: these raw PII fields are intentionally returned to the UI
-        # instead of being masked before display.
-        response = (
-            f"Borrower snapshot for {borrower_record['name']}\n"
-            f"Loan status: {borrower_record['loan_status']}\n"
-            f"Loan type: {borrower_record['loan_type']}\n"
-            f"Credit score: {borrower_record['credit_score']}\n"
-            f"Loan balance: ${borrower_record['loan_balance']:,}\n\n"
-            "Borrower details shown in UI:\n"
-            f"DOB: {borrower_record['date_of_birth']}\n"
-            f"SSN: {borrower_record['ssn']}\n"
-            f"Address: {borrower_record['address']}\n\n"
-            f"Underwriting note:\n{model_output}"
-        )
+        # The underwriting note (model output) is the whole response. Any borrower
+        # PII it contains is redacted at the data_egress guardrail before display.
+        response = model_output
 
         return {
             "response": response,
