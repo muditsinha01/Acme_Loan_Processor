@@ -1,0 +1,392 @@
+{
+  "AI_APP_SEC_001.json": {
+    "file_sha256": "213699b493e7db0044cc0459f8b7df332a3b7bce4a215d8cffed5e6cc893190d",
+    "guardrail_ai_prompt_sha256": "7503ea8ef426b2a213f3ea13cdb0270ffeed31fd3d94b5458cdcf37fc613e9d2",
+    "name": "Do not allow malicious content via hidden prompts"
+  },
+  "AI_APP_SEC_002.json": {
+    "file_sha256": "707dbc5b68f3a1e977319093e0ce0a14d76a29c157ce70da128a86308ce5f4ed",
+    "guardrail_ai_prompt_sha256": "9243949468086b66faa9cf8b2230acc1223545edfe105218970797dfdcd723e2",
+    "name": "Do not allow malicious content via encoded prompts"
+  },
+  "AI_APP_SEC_006.json": {
+    "file_sha256": "9a592cd0322686bd2143b597916ce51c21c96614c5bde6e04dad978dd271a629",
+    "guardrail_ai_prompt_sha256": "5cd4283ef623f394934565d30b09590853eafbf12d79dd14c0b05658b9726e82",
+    "name": "Use only LLMs from the organization's approved list."
+  },
+  "AI_APP_SEC_014.json": {
+    "file_sha256": "f67c2b582a7a94e36a20716e2e261961a6f364275dde179f81027ef28e5720f3",
+    "guardrail_ai_prompt_sha256": "b810f75104def4a4094d20a52ef04eea36a9cbffdb3593e88c1132cf66ef1f43",
+    "name": "MCP server must validate and sanitize all input"
+  },
+  "AI_APP_SEC_022.json": {
+    "file_sha256": "6ae7f981108668af7453554ac6b4f5859ca6d265639ad5096e82b4ff9d001b0e",
+    "guardrail_ai_prompt_sha256": "de2f3da69c50e342c7565e188c43e40bcd3f4da2f2075bd3aa98ce1bdeb9a8ff",
+    "name": "MCP clients must log all interactions with the MCP server"
+  },
+  "AI_APP_SEC_023.json": {
+    "file_sha256": "cc1044f1dc9b9c3ab8090e51a0f0d0eb0fa6a082470be6ef1f8fa1622425904c",
+    "guardrail_ai_prompt_sha256": "c1db0e6fa723abd5744335e29439df75e8a8cf4924aacfb7bd182d981395a701",
+    "name": "Client must validate and sanitize any output from a MCP server"
+  },
+  "AI_APP_SEC_028.json": {
+    "file_sha256": "2c34bc18be9c14a07e5858b04483cf329add98e7e47887a40d4a36b0506e4707",
+    "guardrail_ai_prompt_sha256": "f723118466b23dd6d204458df03b075a1b0a89075783ba793d07eaf95736263f",
+    "name": "Do not use LLMs from the organization's disallowed list"
+  },
+  "AI_APP_SEC_029.json": {
+    "file_sha256": "78a1a092a76aa5d8aaa26971950d353e0cb7c42fcbf9f190df9f7a197fe663a3",
+    "guardrail_ai_prompt_sha256": "61378cecdecae8f31ae5fe50c1976bad0c01e500d2510194b5fe64d9176c418a",
+    "name": "Agent must validate, sanitize LLM output including for presence of eval or any dynamic code execution primitive in LLM output."
+  },
+  "AI_APP_SEC_032.json": {
+    "file_sha256": "25a6a8a1f04a111095dd2ded73a09f8c45ba00e2e8b399b151f2117a4957c867",
+    "guardrail_ai_prompt_sha256": "a5fd6638d8b30bde5948285c93e45e8d9492d7f9a873b1bcadd5c244287a7fba",
+    "name": "Do not allow malicious content via hidden prompts written in leetspeak."
+  },
+  "AI_APP_SEC_033.json": {
+    "file_sha256": "80aef25c686ddbf413080040113d637cd1e2aaf3c5880c19670a3e0ae414002f",
+    "guardrail_ai_prompt_sha256": "89f43d44f7c7a2f3ce50ff24f708fa442baf11335980baae0f97d77108e1d7dc",
+    "name": "MCP server must not interact directly with an LLM"
+  },
+  "AI_APP_SEC_034.json": {
+    "file_sha256": "54cff2f47759f43c88bd73ffd00109fa38dde9f9661a8986624c386bf7733d6c",
+    "guardrail_ai_prompt_sha256": "88d7842f378462ab46de46b9d3a0f439c757ea7b5b6cc465a9ff15723f4f239d",
+    "name": "Clear exit or termination criteria must exist for the agent to consider its task complete and stop executing."
+  },
+  "AI_APP_SEC_035.json": {
+    "file_sha256": "71e3b7497d0d5aaa9af174f526cd0f77daef9ab34a78a3a8b0dc4abb7107ab2b",
+    "guardrail_ai_prompt_sha256": "64e7da7d15feee6448594465e32efe69168a4ce789afd6d6b666ff68cedecae3",
+    "name": "Agents must log all interactions with an LLM"
+  },
+  "AI_APP_SEC_038.json": {
+    "file_sha256": "a2433ff1f182706ba5d61f333432f860afd0a505932ee3ef9ae9a6fc4dc3c797",
+    "guardrail_ai_prompt_sha256": "1a73666d12d99b25db49aead4fcc7790aa860a1c4ee17805322408593d10b43f",
+    "name": "The AI Model must validate and sanitize any input before processing."
+  },
+  "AI_APP_SEC_039.json": {
+    "file_sha256": "bef93fb30723f7c64e456bbc9481c5219d4201475f5b43b0d7a0453e5366db96",
+    "guardrail_ai_prompt_sha256": "e1b625b86bb436771a78eab5e6dde743e1d863a22a4450557da9c4998520aa6d",
+    "name": "Sanitize and validate all input to the AI Model."
+  },
+  "AI_APP_SEC_040.json": {
+    "file_sha256": "351c27c73ea3f6850dbe48ec0ce5b7f44faa17ec642189e2442d6edc19e0e6cf",
+    "guardrail_ai_prompt_sha256": "41dbd1e865b92af1f474c4bc403241572b8adcdbcf5f709e2e46d71c1128890c",
+    "name": "Do not allow malicious content via prompts included in uploaded files."
+  },
+  "AI_APP_SEC_059.json": {
+    "file_sha256": "30d86d262ef899cfa22a9225b34f448da5b37eb255b25ddb6fa0499f370951b5",
+    "guardrail_ai_prompt_sha256": "c901e2a747a2a98ed96dea3a72ee232af98581e211f323ac131bbf013d0da6cc",
+    "name": "Do not allow prompts that can execute malicious commands at runtime."
+  },
+  "AI_APP_SEC_064.json": {
+    "file_sha256": "a0ba6cb7961691c34eae398f582eb1df40df8a6cea8ee02050621f42083c9168",
+    "guardrail_ai_prompt_sha256": "5f7c4a2e40ab628772dfd0f82e389c4f7edf185c1a42e2e9a7296b097731b471",
+    "name": "Enforce synthetic content provenance, labeling, and watermarking for AI-generated outputs."
+  },
+  "AI_APP_SEC_066.json": {
+    "file_sha256": "ae8b5a6888e778c12437e1b794e3d16d99e3693d290f4d9714ed71df460dd623",
+    "guardrail_ai_prompt_sha256": "fdcc638f344db9891bbb7107f64acaae4b0abf56a91c4e020b793994912e98ef",
+    "name": "Do not allow malicious content via prompts included in source files."
+  },
+  "AI_APP_SEC_067.json": {
+    "file_sha256": "58ccd1e09583248f5e584a7352bbd6e7d2b85dcf95d633dab26e68a48332fe98",
+    "guardrail_ai_prompt_sha256": "cfcc11cd37179a9a03f8a39edb1f65f2b7e1a6d39c166988add4a392171f269b",
+    "name": "Detect direct string interpolation of untrusted input into LLM prompts"
+  },
+  "AI_APP_SEC_068.json": {
+    "file_sha256": "19702444e80ba209ffff0b5e4b1c2bc1c7e761a0309b3f6c88f853e7c9cc2e39",
+    "guardrail_ai_prompt_sha256": "388aecae6ac3d3193da9c8321327f2828b45022d0972c0144d92a963f0b993a2",
+    "name": "Detect LLM output used directly in security-sensitive decisions without Human in the Loop (HITL) validation"
+  },
+  "AI_APP_SEC_069.json": {
+    "file_sha256": "130abb5a0b359c0c1ff8a6ecd8502493d50db625bab1014c1eff63ef5b2d6c49",
+    "guardrail_ai_prompt_sha256": "42ba65b8d9a67abd1ad0462e61fec3bb3f8a35beb4a2ad8c2a9bae327677cddf",
+    "name": "AI Agent must implement Human in the Loop (HITL) approval flow for risky operations like delete, purge, destroy"
+  },
+  "AI_APP_SEC_070.json": {
+    "file_sha256": "7f9c696069dfd997010d4035102409eddf88ecadbb836bf369acf2f0b85ccb3e",
+    "guardrail_ai_prompt_sha256": "7af069f0d34ece0c7f81b90504c3542df5fa8c58fbcd0f39e4875336448a35af",
+    "name": "Detect and block all forms of prompt injection attacks in user inputs and file contents"
+  },
+  "AI_APP_SEC_071.json": {
+    "file_sha256": "a6918b06ccaa3410c4aabcbdfe6e5f7f29ee34a5466c386c1ac6a8e880e9d8bf",
+    "guardrail_ai_prompt_sha256": "911eb483cff80288be68af811ca23a27deb4a463c2e53a746c787fab5afdf210",
+    "name": "Enforce chemical, biological, radiological, or nuclear (CBRN) threat prevention safeguards in AI-enabled systems"
+  },
+  "AI_APP_SEC_072.json": {
+    "file_sha256": "79cf1678baa7e551157c35a5b5d64e85985ce49bae28b3cf2da7e61e20a5e309",
+    "guardrail_ai_prompt_sha256": "95446d04dd000f5bb8261984f70b9c7dcd0694c04445934fb25cd5d53d70d67c",
+    "name": "AI systems making consequential decisions must implement explainability mechanisms disclosing decision factors"
+  },
+  "AI_APP_SEC_073.json": {
+    "file_sha256": "183ce75316a1a7f02952fec2447f809f3fb0e746da0ee27a28b4e4efc417f5c2",
+    "guardrail_ai_prompt_sha256": "28f3a1340c8e2d081ab197eeb81c2c166ad6275122d0ba43d8f0a83f4b427391",
+    "name": "AI consequential decisions must include a human review pathway before final determination"
+  },
+  "AI_APP_SEC_074.json": {
+    "file_sha256": "7ac3ed26028ce59e304727073d06eb6cf7b320872b86f58689a4cb3d0154d8b9",
+    "guardrail_ai_prompt_sha256": "a48ee51e36454938a8b317214a2a17f38632c8c4c93af1b066af19a3fd7360e5",
+    "name": "AI systems must implement emergency shutdown and forced-termination mechanisms"
+  },
+  "AI_APP_SEC_075.json": {
+    "file_sha256": "a4d4d28a99dcd0ad420b1d2ab3012f5c25b1c5abbea07750a69e905084241840",
+    "guardrail_ai_prompt_sha256": "c3336e8d193cbf46d2763e56dbc7ea8f8dcdbc3c9c6726b6189c602f8fa99328",
+    "name": "Detect and block use of facial recognition APIs or libraries in employment decision workflows"
+  },
+  "AI_APP_SEC_076.json": {
+    "file_sha256": "f022b003543180f582ee2fc183fe9b4487c3da893803e3598dd65781d3201bd8",
+    "guardrail_ai_prompt_sha256": "012f65980732b623c26f321a4480d2a92b0586b592545763e8623ab377266f21",
+    "name": "High-risk AI systems must provide enhanced disclosures including decision factors, known limitations, accuracy metrics, and appeal rights"
+  },
+  "AI_APP_SEC_077.json": {
+    "file_sha256": "3753abadeeecd9245e5b3134ace117c2aded31c50754e8313d9a5daf77631cd3",
+    "guardrail_ai_prompt_sha256": "4bcc4f6ff9b44e86b4b7fc4b0368c9c558dcf5afa718ef198719dedbefa576d7",
+    "name": "AI systems must provide consumer notice before using ADMT in a consequential decision"
+  },
+  "AI_APP_SEC_078.json": {
+    "file_sha256": "251c744cafea93a63b528b340a1e93a24171b852f5dea2e2ce274b3d7da4052f",
+    "guardrail_ai_prompt_sha256": "2b44436814bd29d6a2b8e48746071358b0aee2b4101657079dc5a9e635a6ce59",
+    "name": "Human review workflows for AI consequential decisions must enforce override authority, reviewer context, and no auto-approve defaults"
+  },
+  "AI_APP_SEC_079.json": {
+    "file_sha256": "ca3be5d1f946214678038a52df5770d478413824d1f9cd12cd79e73272b0f993",
+    "guardrail_ai_prompt_sha256": "aed32c4cbe03330dd54ac2b9b191d6cae1eb96566fe6c7578feef7c7ad26446e",
+    "name": "Enforce rate limiting and throttling on AI API calls"
+  },
+  "AI_DAT_SEC_001.json": {
+    "file_sha256": "7c5fe690e53710751015720afe6f84df1203983a92f016b9acb54bf8ddcfd076",
+    "guardrail_ai_prompt_sha256": "e6c3d4daa8b0fabc6b004433403462029fd92ec3b4e7ab96597a58048a8dbdfd",
+    "name": "Do not store secrets in code."
+  },
+  "AI_DAT_SEC_009.json": {
+    "file_sha256": "53204f8c9b37852a16d7cff83e0869d24e4461498fe4e51dc683527d6f40e2ee",
+    "guardrail_ai_prompt_sha256": "5227bb86a932daa05cc4bdfca3f1354ad4e774a3791306cf8457369d9e4115b1",
+    "name": "If PII data must be shared, it must be encrypted"
+  },
+  "AI_DAT_SEC_010.json": {
+    "file_sha256": "8fee5e88e8ce8cd5a3324b43a0e5d0bbf93ec76bb084c1b16c2acdd8e7542cb8",
+    "guardrail_ai_prompt_sha256": "ee8554b488f037965086c7447a820ac82fcfa95ce2a5f7ed7bcae998682e683d",
+    "name": "Do not log PII."
+  },
+  "AI_DAT_SEC_011.json": {
+    "file_sha256": "0213067c771dff6f44171fc9d9214fd281075347381cdcf44527645fca05766d",
+    "guardrail_ai_prompt_sha256": "8e0631057916efe97ed0427764ad3d911bd4e4e1738d907efc64fe20d838351e",
+    "name": "Do not send PII to AI Models"
+  },
+  "AI_DAT_SEC_012.json": {
+    "file_sha256": "c5dc0a5c184e685a308e290fe98b6ebf50a931d7a024f1cefe847a8ad3ef2f87",
+    "guardrail_ai_prompt_sha256": "61f0d87308248d9ea4507d43274eae6a745b989a9351f25c52e4424d0b581784",
+    "name": "Mask PII on user interfaces"
+  },
+  "AI_DAT_SEC_023.json": {
+    "file_sha256": "aad3306b7dc2aae009f751e0efd5b650be9e5529e1bdd4420a8137e01dcdb90c",
+    "guardrail_ai_prompt_sha256": "3f225a3ec742f2c77e070f0724224429a08b3d10de5daf9a6bc97395284b8ca2",
+    "name": "Redact PII from uploaded files."
+  },
+  "AI_DAT_SEC_024.json": {
+    "file_sha256": "494d76c97a8174b07f6762eebc9c8389494e0e26f9f1c1f6d76777a8ed5fb6e3",
+    "guardrail_ai_prompt_sha256": "af91ee1aca1c380e25567834e5787c8e6f185feb68d5c4efd609d130f6581fd1",
+    "name": "Uploaded files must not contain PII (Singapore)."
+  },
+  "AI_DAT_SEC_025.json": {
+    "file_sha256": "ce2f57656c4ede7fd89d1cacfb1fb55ce701f53ac24df80301e186ce0fa200f4",
+    "guardrail_ai_prompt_sha256": "b6664a588ff492b00425230ba61016d8eb5314f38b335b3768119c004cfeabea",
+    "name": "No file should contain any PII."
+  },
+  "AI_DAT_SEC_027.json": {
+    "file_sha256": "225a62841fdc9bcc10042a262a321402cb3c6cc0e98ff951971767a0e968272c",
+    "guardrail_ai_prompt_sha256": "b8a17487b32909b88e4941fc2120af408d233feb5dcfa2d4590c0a0b566ba21d",
+    "name": "Enforce output data minimisation for model, tool, and API responses."
+  },
+  "AI_DAT_SEC_029.json": {
+    "file_sha256": "06131a95b45de6bbdbe604b4b88db86aa70f118e6bb6b70990ff61df20becd26",
+    "guardrail_ai_prompt_sha256": "1c76280ed9d824743793ac37002b906bb6fe5db2e9aa41472379f798d0c75fb0",
+    "name": "Enforce decision logging, audit trail, and forensic readiness for AI-driven actions."
+  },
+  "AI_DAT_SEC_030.json": {
+    "file_sha256": "d61ce88bf7c6b4678bcb948f34bb6acb8ca0e62238f23588005d1c640e1b6588",
+    "guardrail_ai_prompt_sha256": "93d5417933c32a8dcd9db5726d41866f4cf8cb06704aaa6927b9f84f36d1ab79",
+    "name": "Enforce minimum six-month log retention for high-risk AI systems"
+  },
+  "AI_DAT_SEC_031.json": {
+    "file_sha256": "a9997700cc2f1878fbb9e14316268da0a6d7066deaac560e53039631d4ead879",
+    "guardrail_ai_prompt_sha256": "acd4fcb6b15f6f6901225c6e4f37a8212f155dd5182a5e5557e7ae46aa21d3e2",
+    "name": "Disclose training data sources including categories, types, timeframes, and geography."
+  },
+  "AI_DAT_SEC_032.json": {
+    "file_sha256": "f96b574737f98fe652a6a327f24ddd1afb6a5cef65a6a061efb5c779f2483729",
+    "guardrail_ai_prompt_sha256": "ef0eb175299fb5399178df9b6c6fd950d6178869fa8d86c8cbbebe6e9f1a6063",
+    "name": "Disclose data acquisition methods including permissions, licensing, and preprocessing steps."
+  },
+  "AI_DAT_SEC_033.json": {
+    "file_sha256": "f2346d663361f97997b2c854f53414111c4c860fca7127a92261aea2a9371164",
+    "guardrail_ai_prompt_sha256": "290dd4e8e6c33b844672d850dbe6bc233f8d34a23c9a09f8fc7825c9ca791a5f",
+    "name": "Patient acknowledgment of AI-assisted care must be documented and retained before clinical AI use"
+  },
+  "AI_DAT_SEC_036.json": {
+    "file_sha256": "8a63a0ada875546a543f8df362a924ae5b420f57a87dbbcaab0b091c29eeda58",
+    "guardrail_ai_prompt_sha256": "ea2976c16db0f6236c36f1778c273a08f4ed47c7b2d875ffb225edb8d7662760",
+    "name": "Biometric data collection must be preceded by explicit, documented consent capture"
+  },
+  "AI_DAT_SEC_037.json": {
+    "file_sha256": "5f9478d1ab0a63ee9c1a1b2280edc42dadde9714604bafe4576b3ef6bd38b69c",
+    "guardrail_ai_prompt_sha256": "8fe0cfb517e1379948f30db92912dad2a941b41fb04211e25de18810d84692a1",
+    "name": "Biometric data stores must declare a retention limit and deletion scheduling mechanism"
+  },
+  "AI_DAT_SEC_038.json": {
+    "file_sha256": "08ce9b9bd2e78c47226a5b3302e755917847475a72c857e942232810024aaddc",
+    "guardrail_ai_prompt_sha256": "f0a3bbecd0eb8f16a61dd5d553806dfbaf53ebe1af5c83fe60852cd4b676c7b3",
+    "name": "AI consequential decision records must be retained for a minimum of three years"
+  },
+  "AI_DAT_SEC_039.json": {
+    "file_sha256": "8bac36e1b186d5ab6ffb34596dc245473cb3f50ce59e1cfb3f6e16ff8f49bf8e",
+    "guardrail_ai_prompt_sha256": "64617db9ce50613a746924a7aa5c4cb03193bf0f4f158a0301eb76a1b0044ef6",
+    "name": "AI data stores must enforce encryption at rest and TLS in transit."
+  },
+  "AI_IAC_002.json": {
+    "file_sha256": "c41bb10cd1ffbccb94b6bb2833f42ca14196e316f03feaede298eb4ae210df2e",
+    "guardrail_ai_prompt_sha256": "c695ea08feefe8e482bb35f0d21dc9e9c26db2fd555fdead99b8f68c2575cfc1",
+    "name": "MCP client must authenticate MCP server"
+  },
+  "AI_IAC_006.json": {
+    "file_sha256": "8e0a2a7216ac06e49a25054ccf24454c1aa83152a62a22793331d67092626af7",
+    "guardrail_ai_prompt_sha256": "a2d53b6ef6f3dcac34177fcb2cd412a0ce8364dbc71fec5890f21a012df782af",
+    "name": "MCP server must authenticate all clients"
+  },
+  "AI_IAC_007.json": {
+    "file_sha256": "15604f9b0a0f8f55b78b688f89400e7e16961bf9efe21b7fcbcd0b3856021984",
+    "guardrail_ai_prompt_sha256": "7a05960c9e7a4c2bc6f6f6b3aff715e716b17d5cad1e4ff99bfbd8a9c352bcde",
+    "name": "Inter agent communication must be authenticated."
+  },
+  "AI_IAC_008.json": {
+    "file_sha256": "286553c656b6f677289bbbf78f703ec92b80f093fb60ecc460f530bd3bfcb8e5",
+    "guardrail_ai_prompt_sha256": "9736c023e7cf3c83b33a980bc20c55ce817e65f5f40432eb479d74057af4243e",
+    "name": "Agents must not hold excessive external system credentials"
+  },
+  "AI_IAC_009.json": {
+    "file_sha256": "fe0532fea175568dbaefeed210225dbce70a168b5135ea4e79f66b2017340785",
+    "guardrail_ai_prompt_sha256": "7bd7dbc93071d588948ab328cb2e2a9ff97ddf96e515b594e7193fb10d2b94d8",
+    "name": "LLM endpoints must require authentication"
+  },
+  "AI_IAC_014.json": {
+    "file_sha256": "ea8d0da53467aa06e3949317a2209b2aff3fac054e98b059593d9bf88dcc09d8",
+    "guardrail_ai_prompt_sha256": "626545708938e9bccaa640c2cdb3ef6b99322fb0470677a4ef1ce40d5754ac2b",
+    "name": "A user must authenticate before accessing the AI Agent."
+  },
+  "AI_IAC_015.json": {
+    "file_sha256": "fd387b31e000fab27bd046e2df8439de452f5e5d5f1ae23d2f6538000715baf3",
+    "guardrail_ai_prompt_sha256": "25abfc02d579f91ce638178431f58e4c81d0db50705f731ed93e650a2aa08c70",
+    "name": "Enforce URL allowlists for agent fetches, tools, and outbound HTTP."
+  },
+  "AI_IAC_016.json": {
+    "file_sha256": "5978bca600550b36b3db5b7da6a9a42776b08f208591ba9c1b45c179b030de1e",
+    "guardrail_ai_prompt_sha256": "8384a43cd8810c3cf764ec28b631c310ed965a46db25c294cec58558e63882f1",
+    "name": "Detect and block agent privilege escalation attempts."
+  },
+  "AI_IAC_017.json": {
+    "file_sha256": "dd14debe8de3cfa96f14f4633eccdd522d7a53012edb87d5476dac6932488ba8",
+    "guardrail_ai_prompt_sha256": "0023683d0c7e82fa65419c263ed79f01ef2c0906c21536e99c5ccd78feeafe2a",
+    "name": "Maintain session token integrity with signing, verification, expiry, and binding."
+  },
+  "AI_IAC_018.json": {
+    "file_sha256": "2c9b644a035780a61698bff885c534ec47169ae8fbc569ba2e69326dd8031e17",
+    "guardrail_ai_prompt_sha256": "e89b330d6beba2efae8743acad306cbc120139d1f82404c25f7d90949e1086e9",
+    "name": "Enforce cryptographically verified user-to-agent binding for every request."
+  },
+  "AI_IAC_020.json": {
+    "file_sha256": "5856e2ac8c9c931dec2ce2934ca9f6a16ed6e88ba0bffcdc98eb76823e385ccb",
+    "guardrail_ai_prompt_sha256": "758a6b937217fe193e18f40a551f3d9d7f7bf6fd28371d4dc08c720b722fc18b",
+    "name": "Restrict AI agents to an explicit tool allow list."
+  },
+  "AI_IAC_022.json": {
+    "file_sha256": "d3294e3724f599db7e409eb1ce16e95cfda4fbc92cfd41fc73c830b39779f7b1",
+    "guardrail_ai_prompt_sha256": "0392f0df9586a5555f69b7cff1cd3a64305223477e7b8947bb25f2cefa725759",
+    "name": "Enforce resource bounds, termination limits, and traceability for subagent spawning"
+  },
+  "AI_IAC_023.json": {
+    "file_sha256": "6167219eff0a6a28476a924aafdf33636944ecb37b8f9307611652bb2a1340df",
+    "guardrail_ai_prompt_sha256": "d690176d06768c85ac6d48d3b5eb6580fbb3da215988f8552a274eef4ecdc43d",
+    "name": "Chatbot and AI interfaces must disclose AI identity to the user"
+  },
+  "AI_IAC_024.json": {
+    "file_sha256": "1161ce6bc6edf976b2a3a9fdc51ac0c95d11f73789e30bfd7aa9dcc2883f3847",
+    "guardrail_ai_prompt_sha256": "c1f57139837e6f19ae6ab1eb4e4cbb384a03d01fd4bbf1b1467394a9b9583610",
+    "name": "General purpose AI model integrations must reference a model card or technical documentation"
+  },
+  "AI_IAC_025.json": {
+    "file_sha256": "e94dab802627ad4c7ff5ef8595f6f7233fd5fbe93a304236003962534fda42a5",
+    "guardrail_ai_prompt_sha256": "ebdd76b75591e8beb0e274d7782ab41d2c65aef659ffae61c875255b9c788bca",
+    "name": "Healthcare AI systems must disclose AI use to patients before diagnosis, treatment, or imaging"
+  },
+  "AI_IAC_026.json": {
+    "file_sha256": "179d9110097224948c0d7d01769576fd81e9ca46678a1d79823fea56f89df9de",
+    "guardrail_ai_prompt_sha256": "dc81d890fd8e2d760e4d06d310d9ec4d079e7b112a75f17377084b76b23d923f",
+    "name": "AI clinical recommendations must disclose that human clinicians retain final decision authority"
+  },
+  "AI_IAC_027.json": {
+    "file_sha256": "63a75569681b50939f12b17118fcb91521c17de055dc7d4c51f9fb0d9907b27f",
+    "guardrail_ai_prompt_sha256": "80c053a6ee631a34a89f3b4761d0dfd8b99586b493062fe49dc6d5f5122cf99c",
+    "name": "Healthcare AI communications must include patient instructions to request human-only review"
+  },
+  "AI_IAC_028.json": {
+    "file_sha256": "4d90733991ed27ab5622fb50c14719e47f44d7648d5d1be694d08bdc2ca74bf4",
+    "guardrail_ai_prompt_sha256": "cc485c931a5b604b0a5189ace538338b3f7b548a60362453cb9ab25788a6d5b6",
+    "name": "AI system deployments must declare a risk classification level in configuration metadata"
+  },
+  "AI_IAC_029.json": {
+    "file_sha256": "9c8b6c474efbc9b2ef55d10197a9719b5c373ea41f6e9e961f651e21be9eb64a",
+    "guardrail_ai_prompt_sha256": "e01db81a3b3c58aa9de0a57d482a128305b0104746c88e0aabcbe60f08ff93cc",
+    "name": "AI model deployments must maintain version tracking, change logs, and release documentation"
+  },
+  "AI_IAC_030.json": {
+    "file_sha256": "ee9a6f0f7f16c52d4d236e0fea2e144500d88dffc53a5230d61064a432ff1986",
+    "guardrail_ai_prompt_sha256": "399c9d15917a23ba39011868787f313c1bb2be35dab91f1077ad5e1440a04f8a",
+    "name": "AI system deployments must declare a covered domain classification per automated decision-making regulations"
+  },
+  "AI_IAC_031.json": {
+    "file_sha256": "9bba0e6bfaa6d76c9c2ca15f32b01c21745904b99bd2395826b58814f7601e4a",
+    "guardrail_ai_prompt_sha256": "70fe9740b1aa146429758bd0388a8871db9eedc14ea3c55eda397769d93cfa3b",
+    "name": "AI model endpoints must enforce role-based access control with minimal OAuth scopes"
+  },
+  "AI_SKILL_DAT_SEC_001.json": {
+    "file_sha256": "1ea88a5b5a768888d31fc63eedfd69e045c8bf9784a367414133a2b58dafe9a9",
+    "guardrail_ai_prompt_sha256": "33ca16958ef902b969735fad4b0e6e4a910e5349fe2b479de148f9f2493dda96",
+    "name": "Do not allow skills that exfiltrate data"
+  },
+  "AI_SKILL_SEC_001.json": {
+    "file_sha256": "5707f9f1cee4d9e82f31e00f047c59c7475b3538f45bdb79035a3fc23a71f2b4",
+    "guardrail_ai_prompt_sha256": "6b28d8ec9891bd9e8b038fb42f0203e761f52495c1573262cc512d80fbd45006",
+    "name": "Do not allow malicious skills"
+  },
+  "AI_SKILL_SEC_002.json": {
+    "file_sha256": "7db833d5d0b8a9440eff9df94e80bee0cddae61ab7f7b1bfe0fac364ebffe983",
+    "guardrail_ai_prompt_sha256": "5fb93369f25167fe2b7228e1fc1545b14c86a19215681758521f9eab16cf1721",
+    "name": "Do not allow suspicious skills"
+  },
+  "AI_SKILL_SEC_003.json": {
+    "file_sha256": "012ae52082d75d2aeab16cc6ef09e0cce3ca6e4ca8c8df323da90fb1de3ac640",
+    "guardrail_ai_prompt_sha256": "33a1b04a469dc95b17fd483f0127e988703c3ddd178df1b825d86a7d8bb6020f",
+    "name": "Do not allow skills that are pending a scan"
+  },
+  "AI_VULN_SEC_002.json": {
+    "file_sha256": "34ab2f0575abef45d02b866108c6f0c683fab88bee9dadf4680a2aac24d7a6b4",
+    "guardrail_ai_prompt_sha256": "190dc1baf94e9bdeffd5d26e61af8e740f0c9b4550bbbe657874a721928d8b9c",
+    "name": "Do not allow critical or high vulnerabilities in the code."
+  },
+  "AI_VULN_SEC_005.json": {
+    "file_sha256": "6730bb1dcb989879998a4210189489ea9414c0d98550748ede4cea893f03bba0",
+    "guardrail_ai_prompt_sha256": "9f6578b15cad772ba16219936a46a2f0e4a293a56231ba9a0e24072e456338c9",
+    "name": "Enforce foundation model identity, version pinning, and approved model registry for all AI workloads."
+  },
+  "AI_VULN_SEC_006.json": {
+    "file_sha256": "17e4c92a7c34ad48c29482e063592324cc0d7021e156674187b791292c56e901",
+    "guardrail_ai_prompt_sha256": "46085e0346c336b1a72da2a68423d874835e160da1f05a35651c51e5fd6c69f5",
+    "name": "Memory safety and buffer overflow prevention in native AI code (C/C++/Rust)"
+  },
+  "AI_VULN_SEC_007.json": {
+    "file_sha256": "87a7fb8f3e9560a9b705d269567d3d750c9f6e2eb5b17fedc426c459ccf117b7",
+    "guardrail_ai_prompt_sha256": "b0c485e3802602a5563de713f429002095fdc0bc8834e8d1d280686f6d5bba06",
+    "name": "AI systems must implement incident detection, structured logging, and reporting mechanisms"
+  }
+}

@@ -1,0 +1,101 @@
+Lineaje Guardrail API Help: class lineaje_guardrail in module lineaje_guardrail
+
+class lliinneeaajjee__gguuaarrddrraaiill(builtins.object)
+ |  lineaje_guardrail(
+ |      audit_log_path: 'str | os.PathLike[str]' = 'lineaje_guardrail.jsonl',
+ |      policy_context: 'Optional[Mapping[str, Any]]' = None,
+ |      fail_closed: 'bool' = True,
+ |      max_audit_bytes: 'int' = 52428800,
+ |      audit_backups: 'int' = 5
+ |  ) -> 'None'
+ |
+ |  Priority-aware, deterministic implementation of the Lineaje guardrails.
+ |
+ |  All supplied policies are disabled by default.  Enable them by JSON filename
+ |  with :meth:`enable_policies`, then call :meth:`evaluate` with the payload.
+ |  Redact/Mask policies return a fixed payload; Warn policies do not alter it;
+ |  Block policies raise :class:`GuardrailBlockedError` after writing the audit
+ |  event.
+ |
+ |  Methods defined here:
+ |
+ |  ____iinniitt____(
+ |      self,
+ |      audit_log_path: 'str | os.PathLike[str]' = 'lineaje_guardrail.jsonl',
+ |      policy_context: 'Optional[Mapping[str, Any]]' = None,
+ |      fail_closed: 'bool' = True,
+ |      max_audit_bytes: 'int' = 52428800,
+ |      audit_backups: 'int' = 5
+ |  ) -> 'None'
+ |      Create a guardrail instance with all 78 policies disabled.
+ |
+ |      Args:
+ |          audit_log_path: JSONL file.  Created with mode 0600 where possible.
+ |          policy_context: Organization-level deterministic configuration such
+ |              as ``approved_llms``, ``blocked_llms``, ``approved_url_hosts``,
+ |              ``approved_tools``, ``approved_model_registries`` and role data.
+ |          fail_closed: Stop evaluation on a native policy implementation error.
+ |          max_audit_bytes: Rotate the audit file when it exceeds this size.
+ |          audit_backups: Number of numbered rotated files to retain.
+ |
+ |  ddiissaabbllee__aallll__ppoolliicciieess(self) -> 'None'
+ |      Disable every policy.
+ |
+ |  ddiissaabbllee__ppoolliicciieess(self, policy_files: 'list[str]') -> 'None'
+ |      Disable policies atomically by their JSON filenames.
+ |
+ |  eennaabbllee__ppoolliicciieess(self, policy_files: 'list[str]') -> 'None'
+ |      Enable policies atomically by their JSON filenames.
+ |
+ |  eevvaalluuaattee(self, payload: 'Any') -> 'Any'
+ |      Apply enabled policies in priority order and return the fixed payload.
+ |
+ |      Redact and Mask policies transform the working payload and processing
+ |      continues.  Warn policies only write an audit result.  A matched Block
+ |      policy stops execution, writes results for all lower-priority enabled
+ |      policies as skipped, then raises :class:`GuardrailBlockedError`.
+ |
+ |      The JSONL audit record includes the original payload, before/after
+ |      payload for each executed policy, offending findings, and the external
+ |      caller's file, line number, function, module and source line.
+ |
+ |  ggeett__ppoolliiccyy__mmaapp(self) -> 'dict[str, dict[str, Any]]'
+ |      Return a defensive copy of the runtime policy map.
+ |
+ |  uuppddaattee__ppoolliiccyy__ccoonntteexxtt(self, values: 'Mapping[str, Any]') -> 'None'
+ |      Atomically update organization-level deterministic policy context.
+ |
+ |  ----------------------------------------------------------------------
+ |  Data descriptors defined here:
+ |
+ |  ____ddiicctt____
+ |      dictionary for instance variables
+ |
+ |  ____wweeaakkrreeff____
+ |      list of weak references to the object
+ |
+ |  ----------------------------------------------------------------------
+ |  Data and other attributes defined here:
+ |
+ |  GGuuaarrddrraaiillAAuuddiittEErrrroorr = <class 'lineaje_guardrail.lineaje_guardrail.Guar...
+ |      Raised when the audit record cannot be persisted.
+ |
+ |
+ |  GGuuaarrddrraaiillBBlloocckkeeddEErrrroorr = <class 'lineaje_guardrail.lineaje_guardrail.Gu...
+ |      Raised when a Block policy matches.
+ |
+ |      Attributes:
+ |          policy: JSON filename of the policy that blocked the payload.
+ |          evaluation_id: Correlation identifier for the JSONL audit record.
+ |
+ |
+ |  GGuuaarrddrraaiillEErrrroorr = <class 'lineaje_guardrail.lineaje_guardrail.Guardrail...
+ |      Base error for guardrail configuration/evaluation failures.
+ |
+ |
+ |  GGuuaarrddrraaiillEEvvaalluuaattiioonnEErrrroorr = <class 'lineaje_guardrail.lineaje_guardrail...
+ |      Raised when an enabled policy cannot be evaluated safely.
+ |
+ |
+ |  UUnnkknnoowwnnPPoolliiccyyEErrrroorr = <class 'lineaje_guardrail.lineaje_guardrail.Unkno...
+ |      Raised when a policy filename is not in the embedded 78-policy set.
