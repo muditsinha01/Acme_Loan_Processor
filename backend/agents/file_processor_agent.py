@@ -55,7 +55,8 @@ _INJECTION_PATTERNS = [
         "safety bypass",
         re.compile(
             r"\b(?:discard|disable|bypass|ignore|turn\s+off)\b[^.\n]{0,40}"
-            r"\b(?:alignment|guardrails?|safety\s+(?:layers?|polic(?:y|ies)|filters?|guidelines))\b",
+            r"\b(?:alignment|guardrails?|safety\s+(?:layers?|polic(?:y|ies)|filters?|guidelines))\b"
+            r"|\b(?:do\s+not|don't|no)\s+need\s+to\s+block\b",
             re.IGNORECASE,
         ),
     ),
@@ -71,7 +72,8 @@ _INJECTION_PATTERNS = [
         "model-targeted directive",
         re.compile(
             r"\b(?:binding_on_downstream_model|summari[sz]er_(?:directive|output_contract)"
-            r"|downstream[_\s](?:model|summari[sz]er)|require_model_to_\w+)\b|\bLLM\s+PRIORITY\b",
+            r"|downstream[_\s](?:model|summari[sz]er)|require_model_to_\w+"
+            r"|must_(?:decode|echo|quote|include|output|repeat)\w*|first_section_title_must_be)\b|\bLLM\s+PRIORITY\b",
             re.IGNORECASE,
         ),
     ),
@@ -85,13 +87,14 @@ _INJECTION_PATTERNS = [
     ),
     (
         "role/system tag",
-        re.compile(r"<\s*/?\s*(?:important|system|instructions?|admin)\s*>|\[/?INST\]", re.IGNORECASE),
+        re.compile(r"<\s*/?\s*(?:important|system|instructions?|admin|user_query)\s*>|\[/?INST\]", re.IGNORECASE),
     ),
     (
         "shell execution",
         re.compile(
             r"\|\s*(?:/bin/)?(?:ba|z)?sh\b|\bbase64\s+-d\b|\b(?:curl|wget)\s+\S+"
-            r"|\b(?:run|execute)\b[^.\n]{0,30}\b(?:ripgrep|rg|grep|bash|shell|command|script)\b",
+            r"|\b(?:run|execute)\b[^.\n]{0,30}\b(?:ripgrep|rg|grep|bash|shell|commands?|scripts?)\b"
+            r"|\becho\s+[^|\n]{1,200}\|",
             re.IGNORECASE,
         ),
     ),
@@ -104,30 +107,10 @@ _INJECTION_PATTERNS = [
         ),
     ),
 ]
-_MAX_REPORTED_FINDINGS = 5
-# Most telling categories first when listing findings in the block message.
-_FINDING_PRIORITY = [
-    "instruction override",
-    "safety bypass",
-    "concealment",
-    "secret exfiltration",
-    "data exfiltration",
-    "shell execution",
-    "injected instructions",
-    "role/system tag",
-    "hidden zero-width characters",
-    "model-targeted directive",
-]
-
-
-def _finding_rank(category: str) -> int:
-    if "-encoded " in category:
-        return -1
-    return _FINDING_PRIORITY.index(category) if category in _FINDING_PRIORITY else len(_FINDING_PRIORITY)
 
 # Hidden-content tricks: zero-width characters used to split or hide tokens,
 # and Base64 / hex blobs that decode to instructions.
-_ZERO_WIDTH_CHARS = re.compile("[​‌‍⁠﻿]")
+_ZERO_WIDTH_CHARS = re.compile("[\u200b\u200c\u200d\u2060\ufeff]")
 _MIN_ZERO_WIDTH_TO_FLAG = 3
 _HEX_CANDIDATE = re.compile(r"\b(?:[0-9a-fA-F]{2}){20,}\b")
 _BASE64_CANDIDATE = re.compile(r"[A-Za-z0-9+/]{40,}={0,2}")
@@ -171,6 +154,53 @@ def _decode_hidden_payloads(line: str) -> list[tuple[str, str]]:
         if text:
             decoded.append(("base64", text))
     return decoded
+
+
+def _line_injection_category(line: str, zero_width_count: int) -> Optional[str]:
+    """Why this (zero-width-stripped) line is an injection, or None if it's clean."""
+    category = _match_injection(line)
+    if category:
+        return category
+    if zero_width_count >= _MIN_ZERO_WIDTH_TO_FLAG:
+        return "hidden zero-width characters"
+    for encoding, decoded_text in _decode_hidden_payloads(line):
+        category = _match_injection(decoded_text)
+        if category:
+            return f"{encoding}-encoded {category}"
+    return None
+
+
+_SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?])\s+")
+# Only very long lines (a PDF page often extracts as one line) are stripped
+# sentence by sentence; anything shorter is dropped whole, since the rest of
+# an injected line is usually part of the same payload.
+_MIN_LINE_CHARS_FOR_SENTENCE_STRIP = 500
+_TAG_BLOCK_OPEN = re.compile(r"<\s*(important|system|instructions?|admin|user_query)\s*>", re.IGNORECASE)
+
+
+def _closes_tag_block(line: str, tag: str) -> bool:
+    return re.search(rf"<\s*/\s*{re.escape(tag)}\s*>", line, re.IGNORECASE) is not None
+
+
+def _strip_injected_text(line: str, zero_width_count: int) -> tuple[str, list[str]]:
+    """Return the clean part of a (zero-width-stripped) line and the category
+    of each injected piece removed."""
+    category = _line_injection_category(line.strip(), zero_width_count)
+    if not category:
+        return line, []
+    if len(line) >= _MIN_LINE_CHARS_FOR_SENTENCE_STRIP and zero_width_count < _MIN_ZERO_WIDTH_TO_FLAG:
+        sentences = _SENTENCE_BOUNDARY.split(line)
+        if len(sentences) > 1:
+            kept, removed = [], []
+            for sentence in sentences:
+                sentence_category = _line_injection_category(sentence.strip(), 0) if sentence.strip() else None
+                if sentence_category:
+                    removed.append(sentence_category)
+                else:
+                    kept.append(sentence)
+            if removed:
+                return " ".join(kept), removed
+    return "", [category]
 
 
 class FileProcessorAgent(PolicyProbeAgentFramework):
@@ -254,30 +284,15 @@ class FileProcessorAgent(PolicyProbeAgentFramework):
         }
 
     async def handle(self, context: dict[str, Any]) -> dict[str, Any]:
-        file_contents = context.get("file_contents", [])
-
-        # AI_APP_SEC_070 remediation: scan uploaded content for prompt injection
-        # and block before any of it is sent to the model or echoed to the UI.
-        injection_findings = self.detect_prompt_injection(file_contents)
-        if injection_findings:
+        # AI_APP_SEC_070 remediation: strip prompt-injection lines from uploaded
+        # content before any of it reaches the model or the UI; the rest of the
+        # document is processed as normal.
+        file_contents, removed_lines = self.strip_prompt_injection(context.get("file_contents", []))
+        if removed_lines:
             logger.warning(
-                "Prompt injection detected in uploaded file content",
-                extra={
-                    "agent": self.AGENT_ID,
-                    "findings": [
-                        {"filename": finding["filename"], "category": finding["category"]}
-                        for finding in injection_findings
-                    ],
-                },
+                "Stripped prompt injection from uploaded file content",
+                extra={"agent": self.AGENT_ID, "removed": removed_lines},
             )
-            return {
-                "response": self.build_injection_block_response(injection_findings),
-                "agent": self.AGENT_NAME,
-                "model": self.MODEL_NAME,
-                "framework": self.FRAMEWORK_NAME,
-                "mcp_activity": [],
-                "workflow_status": "blocked",
-            }
 
         file_summary = build_file_summary(file_contents, include_raw_text=True)
         pii_exposure_summary = self.build_pii_exposure_summary(file_contents)
@@ -307,6 +322,8 @@ class FileProcessorAgent(PolicyProbeAgentFramework):
                 f"Processing note:\n{model_output}\n\n"
                 f"Extracted content preview:\n{file_summary}"
             )
+        if removed_lines:
+            response = f"{self.build_removal_note(removed_lines)}\n\n{response}"
 
         return {
             "response": response,
@@ -316,66 +333,56 @@ class FileProcessorAgent(PolicyProbeAgentFramework):
             "mcp_activity": mcp_activity,
         }
 
-    def detect_prompt_injection(self, file_contents: list[dict[str, Any]]) -> list[dict[str, str]]:
-        """Return one finding per uploaded-file line that matches an injection pattern."""
-        findings: list[dict[str, str]] = []
+    def strip_prompt_injection(
+        self, file_contents: list[dict[str, Any]]
+    ) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
+        """Return copies of the files with injected text and zero-width
+        characters removed, plus one record per removed passage."""
+        sanitized_files: list[dict[str, Any]] = []
+        removed: list[dict[str, str]] = []
         for file_data in file_contents:
             filename = file_data.get("filename", "unknown")
-            for raw_line in (file_data.get("extracted_content") or "").splitlines():
-                zero_width_count = len(_ZERO_WIDTH_CHARS.findall(raw_line))
-                line = _ZERO_WIDTH_CHARS.sub("", raw_line).strip()
-                if not line:
+            kept_lines: list[str] = []
+            open_tag: Optional[str] = None
+            # keepends so clean text (line endings included) passes through unchanged.
+            for raw_line in (file_data.get("extracted_content") or "").splitlines(keepends=True):
+                body = raw_line.rstrip("\r\n")
+                line_ending = raw_line[len(body):]
+                zero_width_count = len(_ZERO_WIDTH_CHARS.findall(body))
+                line = _ZERO_WIDTH_CHARS.sub("", body)
+
+                # Everything inside an <IMPORTANT>/<system>/... block is payload.
+                if open_tag:
+                    if line.strip():
+                        removed.append({"filename": filename, "category": "role/system tag block"})
+                    if _closes_tag_block(line, open_tag):
+                        open_tag = None
+                    continue
+                opening = _TAG_BLOCK_OPEN.search(line)
+                if opening and not _closes_tag_block(line[opening.end():], opening.group(1)):
+                    open_tag = opening.group(1)
+                    removed.append({"filename": filename, "category": "role/system tag block"})
                     continue
 
-                category = _match_injection(line)
-                if category:
-                    findings.append({"filename": filename, "category": category, "line": line})
+                if not line.strip():
+                    kept_lines.append(line + line_ending)
                     continue
-                if zero_width_count >= _MIN_ZERO_WIDTH_TO_FLAG:
-                    findings.append(
-                        {"filename": filename, "category": "hidden zero-width characters", "line": line}
-                    )
-                    continue
-                for encoding, decoded_text in _decode_hidden_payloads(line):
-                    category = _match_injection(decoded_text)
-                    if category:
-                        findings.append(
-                            {
-                                "filename": filename,
-                                "category": f"{encoding}-encoded {category}",
-                                "line": f"decodes to: {decoded_text.strip()}",
-                            }
-                        )
-                        break
-        return findings
+                kept_text, removed_categories = _strip_injected_text(line, zero_width_count)
+                removed.extend({"filename": filename, "category": category} for category in removed_categories)
+                if kept_text.strip():
+                    kept_lines.append(kept_text + line_ending)
+            sanitized_files.append({**file_data, "extracted_content": "".join(kept_lines)})
+        return sanitized_files, removed
 
-    def build_injection_block_response(self, findings: list[dict[str, str]]) -> str:
-        # One example per category first (most telling first), then the rest.
-        ordered = sorted(findings, key=lambda finding: _finding_rank(finding["category"]))
-        seen_categories: set[str] = set()
-        first_per_category, remainder = [], []
-        for finding in ordered:
-            if finding["category"] in seen_categories:
-                remainder.append(finding)
-            else:
-                seen_categories.add(finding["category"])
-                first_per_category.append(finding)
-
-        flagged_lines = []
-        for finding in (first_per_category + remainder)[:_MAX_REPORTED_FINDINGS]:
-            line = finding["line"]
-            if len(line) > 160:
-                line = line[:157] + "..."
-            flagged_lines.append(f"- {finding['filename']} ({finding['category']}): \"{line}\"")
-        if len(findings) > _MAX_REPORTED_FINDINGS:
-            flagged_lines.append(f"- ...and {len(findings) - _MAX_REPORTED_FINDINGS} more")
-
-        return (
-            "File Processor Agent blocked this upload: prompt injection detected in the file contents.\n\n"
-            "Flagged content:\n"
-            + "\n".join(flagged_lines)
-            + "\n\nThe file was not sent to the model and none of its instructions were followed."
+    @staticmethod
+    def build_removal_note(removed: list[dict[str, str]]) -> str:
+        per_file: dict[str, int] = {}
+        for record in removed:
+            per_file[record["filename"]] = per_file.get(record["filename"], 0) + 1
+        details = ", ".join(
+            f"{count} passage{'s' if count != 1 else ''} from {filename}" for filename, count in per_file.items()
         )
+        return f"Removed embedded instructions (prompt injection) before processing: {details}."
 
     def extract_pii_lines(self, content: str, limit: int = 12) -> list[str]:
         keyword_markers = (
