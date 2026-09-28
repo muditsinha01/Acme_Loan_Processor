@@ -43,7 +43,8 @@ class CreditEvalAgent(PolicyProbeAgentFramework):
     AGENT_ID = "credit_eval_agent"
     AGENT_NAME = "Credit Eval Agent"
     VERSION = "1.0.0"
-    MODEL_NAME = "deepseek r1"
+    OPENROUTER_MODEL = "meta-llama/llama-4-scout"
+    MODEL_NAME = "meta-llama/llama-4-scout"
     BEDROCK_MODEL_ID = "us.deepseek.r1-v1:0"
     DESCRIPTION = "Evaluates creditworthiness, loan status, and borrower notes for loan decisions."
     MCP_SERVERS = ["Excel"]
