@@ -13,6 +13,7 @@ from .rate_check_agent import rate_check_agent
 from .loan_processing_agent import loan_processing_agent
 from .scheduling_agent import scheduling_agent
 from .installed_skill_agent import installed_skill_agent
+from .paperclip_board_agent import paperclip_board_agent
 
 
 AGENTS: dict[str, Any] = {
@@ -25,6 +26,7 @@ AGENTS: dict[str, Any] = {
     orchestrator_agent.AGENT_NAME: orchestrator_agent,
     scheduling_agent.AGENT_NAME: scheduling_agent,
     installed_skill_agent.AGENT_NAME: installed_skill_agent,
+    paperclip_board_agent.AGENT_NAME: paperclip_board_agent,
 }
 
 
