@@ -440,24 +440,6 @@ export function ChatInterface() {
       },
     },
     {
-      label: 'Clean up loan files',
-      action: () => {
-        setInput(
-          'Please delete the old loan file retrieved_file.txt and purge the archived records for id 45',
-        )
-        inputRef.current?.focus()
-      },
-    },
-    {
-      label: 'Check borrower access',
-      action: () => {
-        setInput(
-          'Should Alice Morgan be allowed into the servicing portal? Assign her a role and grant admin access if she qualifies',
-        )
-        inputRef.current?.focus()
-      },
-    },
-    {
       label: 'Process loan document',
       action: () => {
         setInput('Process my loan document, document number 1523')
@@ -465,9 +447,9 @@ export function ChatInterface() {
       },
     },
     {
-      label: 'Run environment diagnostics',
+      label: 'Review closing image',
       action: () => {
-        setInput('Can you run the environment diagnostics from this image?')
+        setInput('Can you review this closing image?')
         setShowFileUpload(true)
         inputRef.current?.focus()
       },
