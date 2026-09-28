@@ -5,9 +5,25 @@ This entry point exposes the vulnerable multi-agent loan workflow used by the
 demo UI. The backend now routes through a central agent catalog so the agent
 names, model names, and MCP server names are easy to inspect in source.
 """
+# Copyright (c) Lineaje, Inc. All rights reserved.
+# Lineaje UnifAI guardrail  version=2.0.0-alpha
+def _lineaje_load_gr_client():
+    """Lineaje-added: load gr_stub_client.py without a pip dependency."""
+    import sys as _s, importlib.util as _ilu
+    from pathlib import Path as _P
+    n = "_lineaje_gr_stub_client"
+    if n in _s.modules: return _s.modules[n]
+    h = _P(__file__).resolve().parent
+    _cand = next((d / "gr_stub_client.py" for d in [h, *h.parents][:8] if (d / "gr_stub_client.py").is_file()), h / "gr_stub_client.py")
+    _spec = _ilu.spec_from_file_location(n, _cand)
+    _s.modules[n] = _m = _ilu.module_from_spec(_spec)
+    _spec.loader.exec_module(_m); return _m
 
+
+import asyncio
 import base64
 import json
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -22,6 +38,7 @@ from typing import Optional
 
 from fastapi import FastAPI, HTTPException, UploadFile, File, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from agents.runtime import build_catalog, handle_chat_request, process_file_attachment
@@ -38,9 +55,7 @@ MCP_CALL_LOG: list[dict] = []
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler."""
-    logger.info("Acme Loan Processor backend starting up...")
     yield
-    logger.info("Acme Loan Processor backend shutting down...")
 
 
 app = FastAPI(
@@ -85,6 +100,8 @@ class SkillInvocation(BaseModel):
     version: str
     description: str
     status: str
+    source: Optional[str] = None
+    scan_status: Optional[str] = None
 
 
 class WorkflowStage(BaseModel):
@@ -111,23 +128,29 @@ async def health_check():
     return {"status": "healthy", "service": "acme-loan-processor"}
 
 
-@app.post("/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest):
-    """
-    Main chat endpoint that processes user messages and file uploads.
-
-    This endpoint:
-    1. Receives user messages and optional file attachments
-    2. Processes files through the File Processor Agent
-    3. Routes the request through the Orchestrator Agent
-    4. Returns the agent response
+async def _process_chat(request: ChatRequest) -> dict:
+    """Core chat processing shared by the synchronous /chat endpoint and the
+    background job endpoints below. Returns {"ok": True, ...ChatResponse
+    fields} on success, or {"ok": False, "detail": ..., "policy_error": ...}
+    on failure — never raises, so callers running this as a background task
+    don't need their own top-level try/except.
     """
     try:
         file_contents = []
         if request.attachments:
             for attachment in request.attachments:
+                _lineaje_payload = "Processing attachment"
+                # LINEAJE: enforce() `_lineaje_payload` at agent->log log_emit — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.). Mask/block; do not remove without review. site_id='site:sha256:aed017d73aac0941ea66e85c48af29dff69f97a3255f868fef74c571609e0b12'
+                _gr_client = _lineaje_load_gr_client()
+                _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:aed017d73aac0941ea66e85c48af29dff69f97a3255f868fef74c571609e0b12', phase='log_emit', boundary={'source': 'log', 'sink': 'log'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_010', 'guardrail_id': 'Mask PII in Logs', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='log')
+                try:
+                    _lineaje_payload = await __import__('asyncio').to_thread(lambda: _gr_client.enforce(_gr_site, _lineaje_payload, content_type='application/json'))
+                except _gr_client.GuardrailUnavailableError:
+                    pass
+                except PermissionError:
+                    pass
                 logger.info(
-                    "Processing attachment",
+                    _lineaje_payload,
                     extra={
                         "file_name": attachment.name,
                         "file_type": attachment.type,
@@ -139,8 +162,18 @@ async def chat(request: ChatRequest):
                     }
                 )
 
+                _lineaje_content = attachment.content
+                # LINEAJE: enforce() `_lineaje_content` at file_storage->agent file_upload — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.); AI_APP_SEC_070 (Detect and block all forms of prompt injection attacks in user inputs and file contents). Mask/block; do not remove without review. site_id='site:sha256:91db1bc558a436d9deb8471280beb5884fb420f60c7bcfdcd5bb9b63c1c0180e'
+                _gr_client = _lineaje_load_gr_client()
+                _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:91db1bc558a436d9deb8471280beb5884fb420f60c7bcfdcd5bb9b63c1c0180e', phase='file_upload', boundary={'source': 'file_upload', 'sink': 'agent_context'}, candidate_policies=[{'policy_id': 'AI_APP_SEC_070', 'guardrail_id': 'Sanitize Prompt Injection', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_DAT_SEC_023', 'guardrail_id': 'Redact PII from uploaded files', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_DAT_SEC_024', 'guardrail_id': 'Redact PII (Singapore) from contents ofuploaded files', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='file_storage', destination_type='agent')
+                try:
+                    _lineaje_content = await __import__('asyncio').to_thread(lambda: _gr_client.enforce(_gr_site, _lineaje_content, content_type='application/json'))
+                except _gr_client.GuardrailUnavailableError:
+                    pass
+                except PermissionError:
+                    raise
                 processed = await process_file_attachment(
-                    content=attachment.content,
+                    content=_lineaje_content,
                     filename=attachment.name,
                     content_type=attachment.type
                 )
@@ -154,31 +187,32 @@ async def chat(request: ChatRequest):
 
         response = await handle_chat_request(context)
 
-        skill_invocation = response.get("skill_invocation")
-        workflow_stages = response.get("workflow_stages")
-        return ChatResponse(
-            response=response.get("response", "I processed your request."),
-            conversation_id=request.conversation_id,
-            policy_warning=response.get("policy_warning"),
-            workflow_status=response.get("workflow_status"),
-            agent=response.get("agent"),
-            skill_used=response.get("skill_used"),
-            skill_content_bytes=response.get("skill_content_bytes"),
-            workflow_stages=(
-                [WorkflowStage(**stage) for stage in workflow_stages]
-                if workflow_stages
-                else None
-            ),
-            skill_invocation=(
-                SkillInvocation(**skill_invocation) if skill_invocation else None
-            ),
-        )
+        return {
+            "ok": True,
+            "response": response.get("response", "I processed your request."),
+            "conversation_id": request.conversation_id,
+            "policy_warning": response.get("policy_warning"),
+            "workflow_status": response.get("workflow_status"),
+            "agent": response.get("agent"),
+            "skill_used": response.get("skill_used"),
+            "skill_content_bytes": response.get("skill_content_bytes"),
+            "workflow_stages": response.get("workflow_stages"),
+            "skill_invocation": response.get("skill_invocation"),
+        }
 
-    except HTTPException:
-        raise
     except Exception as e:
-        logger.error(
-            "Error processing chat request",
+        _lineaje_payload = "Error processing chat request"
+        # LINEAJE: enforce() `_lineaje_payload` at agent->log log_emit — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.). Mask/block; do not remove without review. site_id='site:sha256:a44946f648d5d48924deb25f40836d5f2a1c36ef2327e62f26877e73d2b91c4e'
+        _gr_client = _lineaje_load_gr_client()
+        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:a44946f648d5d48924deb25f40836d5f2a1c36ef2327e62f26877e73d2b91c4e', phase='log_emit', boundary={'source': 'log', 'sink': 'log'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_010', 'guardrail_id': 'Mask PII in Logs', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='log')
+        try:
+            _lineaje_payload = await __import__('asyncio').to_thread(lambda: _gr_client.enforce(_gr_site, _lineaje_payload, content_type='application/json'))
+        except _gr_client.GuardrailUnavailableError:
+            pass
+        except PermissionError:
+            pass
+        logger.exception(
+            _lineaje_payload,
             extra={
                 # VULNERABILITY: Error context includes full state
                 "error": str(e),
@@ -188,16 +222,118 @@ async def chat(request: ChatRequest):
                 }
             }
         )
-        raise HTTPException(
+        return {
+            "ok": False,
+            "detail": "An error occurred processing your request",
+            "policy_error": {
+                "type": "general",
+                "message": str(e)
+            },
+        }
+
+
+@app.post("/chat", response_model=ChatResponse)
+async def chat(request: ChatRequest):
+    """
+    Main chat endpoint that processes user messages and file uploads.
+
+    This endpoint:
+    1. Receives user messages and optional file attachments
+    2. Processes files through the File Processor Agent
+    3. Routes the request through the Orchestrator Agent
+    4. Returns the agent response
+
+    Guardrail checks in this pipeline can each take several seconds, and a
+    slow/unreachable GR service can push total request time past 30s — long
+    enough for a dev-mode --reload restart or a proxy to drop the
+    connection mid-request. Prefer POST /chat/jobs + GET /chat/jobs/{id}
+    (polling) for UI use; this endpoint stays for direct/API callers.
+    """
+    result = await _process_chat(request)
+    if not result["ok"]:
+        _lineaje_content = {"detail": result["detail"], "policy_error": result["policy_error"]}
+        # LINEAJE: enforce() `_lineaje_content` at agent->user_interface data_egress — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.). Mask/block; do not remove without review. site_id='site:sha256:582d2d1385b63954e18458bee29d247d38623c6e5eaf462d773084f63beb7656'
+        _gr_client = _lineaje_load_gr_client()
+        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:582d2d1385b63954e18458bee29d247d38623c6e5eaf462d773084f63beb7656', phase='data_egress', boundary={'source': 'agent_message', 'sink': 'user_interface'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_012', 'guardrail_id': 'Mask PII on UI', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='user_interface')
+        try:
+            _lineaje_content = await __import__('asyncio').to_thread(lambda: _gr_client.enforce(_gr_site, _lineaje_content, content_type='text/plain'))
+        except _gr_client.GuardrailUnavailableError:
+            pass
+        except PermissionError:
+            pass
+        return JSONResponse(
             status_code=500,
-            detail={
-                "detail": "An error occurred processing your request",
-                "policy_error": {
-                    "type": "general",
-                    "message": str(e)
-                }
-            }
+            content=_lineaje_content,
         )
+    return ChatResponse(
+        response=result["response"],
+        conversation_id=result["conversation_id"],
+        policy_warning=result["policy_warning"],
+        workflow_status=result["workflow_status"],
+        agent=result["agent"],
+        skill_used=result["skill_used"],
+        skill_content_bytes=result["skill_content_bytes"],
+        workflow_stages=(
+            [WorkflowStage(**stage) for stage in result["workflow_stages"]]
+            if result["workflow_stages"]
+            else None
+        ),
+        skill_invocation=(
+            SkillInvocation(**result["skill_invocation"]) if result["skill_invocation"] else None
+        ),
+    )
+
+
+# In-memory job store for the polling flow below. Fine for this single-process
+# demo backend; a process restart (e.g. uvicorn --reload) loses pending jobs,
+# which the client treats as "job not found" and resubmits.
+_CHAT_JOBS: dict[str, dict] = {}
+
+
+class ChatJobStartResponse(BaseModel):
+    job_id: str
+
+
+async def _run_chat_job(job_id: str, request: ChatRequest) -> None:
+    result = await _process_chat(request)
+    if result["ok"]:
+        _CHAT_JOBS[job_id] = {"status": "done", **{k: v for k, v in result.items() if k != "ok"}}
+    else:
+        _CHAT_JOBS[job_id] = {
+            "status": "error",
+            "detail": result["detail"],
+            "policy_error": result["policy_error"],
+        }
+
+
+@app.post("/chat/jobs", response_model=ChatJobStartResponse)
+async def start_chat_job(request: ChatRequest):
+    """Start chat processing in the background and return a job id right away.
+
+    Use this + GET /chat/jobs/{job_id} to poll instead of holding one long
+    connection open through POST /chat.
+    """
+    job_id = str(uuid.uuid4())
+    _CHAT_JOBS[job_id] = {"status": "pending"}
+    asyncio.create_task(_run_chat_job(job_id, request))
+    return ChatJobStartResponse(job_id=job_id)
+
+
+@app.get("/chat/jobs/{job_id}")
+async def get_chat_job(job_id: str):
+    job = _CHAT_JOBS.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Unknown or expired job_id")
+    # LINEAJE: enforce() `job` at agent->user_interface data_egress — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.). Mask/block; do not remove without review. site_id='site:sha256:16b1dade4de3b023598262c219cb905db7031d17aef5d514b28ea0766b9dff1e'
+    _gr_client = _lineaje_load_gr_client()
+    _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:16b1dade4de3b023598262c219cb905db7031d17aef5d514b28ea0766b9dff1e', phase='data_egress', boundary={'source': 'agent_message', 'sink': 'user_interface'}, candidate_policies=[{'policy_id': 'AI_DAT_SEC_012', 'guardrail_id': 'Mask PII on UI', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='user_interface')
+    try:
+        job = _gr_client.enforce(_gr_site, job, content_type='text/plain')
+    except _gr_client.GuardrailUnavailableError:
+        pass
+    except PermissionError:
+        pass
+    return job
 
 
 @app.post("/upload")
@@ -215,6 +351,15 @@ async def upload_file(file: UploadFile = File(...)):
     else:
         processed_content = content.decode("utf-8", errors="ignore")
 
+    # LINEAJE: enforce() `processed_content` at file_storage->agent file_upload — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.); AI_APP_SEC_070 (Detect and block all forms of prompt injection attacks in user inputs and file contents). Mask/block; do not remove without review. site_id='site:sha256:69cc0cd647c891bde403a5a8db856ac366d5257a2cf64af808f4638764db7cdc'
+    _gr_client = _lineaje_load_gr_client()
+    _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:69cc0cd647c891bde403a5a8db856ac366d5257a2cf64af808f4638764db7cdc', phase='file_upload', boundary={'source': 'file_upload', 'sink': 'agent_context'}, candidate_policies=[{'policy_id': 'AI_APP_SEC_070', 'guardrail_id': 'Sanitize Prompt Injection', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_DAT_SEC_023', 'guardrail_id': 'Redact PII from uploaded files', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_DAT_SEC_024', 'guardrail_id': 'Redact PII (Singapore) from contents ofuploaded files', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='file_storage', destination_type='agent')
+    try:
+        processed_content = await __import__('asyncio').to_thread(lambda: _gr_client.enforce(_gr_site, processed_content, content_type='application/json'))
+    except _gr_client.GuardrailUnavailableError:
+        pass
+    except PermissionError:
+        raise
     processed = await process_file_attachment(
         content=processed_content,
         filename=file.filename,
@@ -271,6 +416,13 @@ async def get_mcp_servers():
 
 
 def _handle_mock_mcp_call(server_key: str, tool_name: str, arguments: dict) -> dict:
+    # LINEAJE: enforce() `arguments` at agent->external data_egress — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.). Mask/block; do not remove without review. site_id='site:sha256:bf48fb8df6f3c4a33e73ddda7b49947aa2e1038fdb73f8076a7236e8b782a9f3'
+    _gr_client = _lineaje_load_gr_client()
+    _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:bf48fb8df6f3c4a33e73ddda7b49947aa2e1038fdb73f8076a7236e8b782a9f3', phase='data_egress', boundary={'source': 'agent_message', 'sink': 'external_endpoint'}, candidate_policies=[], fail_mode='ALLOW_WITH_AUDIT', source_type='agent', destination_type='external')
+    try:
+        arguments = _gr_client.enforce(_gr_site, arguments, content_type='application/json', variable_name='arguments', source_file=__file__, before_line=347)
+    except _gr_client.GuardrailUnavailableError:
+        pass
     timestamp = datetime.now(timezone.utc).isoformat()
     log_entry = {
         "server_key": server_key,

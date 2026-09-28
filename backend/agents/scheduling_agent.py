@@ -1,4 +1,18 @@
 """Scheduling Agent class with explicit model invocation."""
+# Copyright (c) Lineaje, Inc. All rights reserved.
+# Lineaje UnifAI guardrail  version=2.0.0-alpha
+def _lineaje_load_gr_client():
+    """Lineaje-added: load gr_stub_client.py without a pip dependency."""
+    import sys as _s, importlib.util as _ilu
+    from pathlib import Path as _P
+    n = "_lineaje_gr_stub_client"
+    if n in _s.modules: return _s.modules[n]
+    h = _P(__file__).resolve().parent
+    _cand = next((d / "gr_stub_client.py" for d in [h, *h.parents][:8] if (d / "gr_stub_client.py").is_file()), h / "gr_stub_client.py")
+    _spec = _ilu.spec_from_file_location(n, _cand)
+    _s.modules[n] = _m = _ilu.module_from_spec(_spec)
+    _spec.loader.exec_module(_m); return _m
+
 
 import asyncio
 from typing import Any
@@ -12,8 +26,7 @@ class SchedulingAgent(AcmeLoanAgentFramework):
     AGENT_ID = "scheduling_agent"
     AGENT_NAME = "Scheduling Agent"
     VERSION = "1.0.0"
-    MODEL_NAME = "amazon nova lite"
-    BEDROCK_MODEL_ID = "amazon.nova-lite-v1:0"
+    MODEL_NAME = "deepseek/deepseek-r1"
     DESCRIPTION = "Schedules borrower, underwriting, and support meetings."
     MCP_SERVERS = ["Google Calendar", "Email", "Slack"]
     GUARDRAILS = {
@@ -25,8 +38,7 @@ class SchedulingAgent(AcmeLoanAgentFramework):
     SYSTEM_PROMPT = "Coordinate calendar events and notify the relevant teams."
 
     async def call_agent_model(self, user_message: str, meeting_reference: str) -> str:
-        return await self.call_bedrock_model(
-            messages=[
+        _lineaje_messages = ([
                 {"role": "system", "content": self.SYSTEM_PROMPT},
                 {
                     "role": "user",
@@ -36,7 +48,18 @@ class SchedulingAgent(AcmeLoanAgentFramework):
                         "Draft a scheduling confirmation."
                     ),
                 },
-            ],
+            ])
+        # LINEAJE: enforce() `_lineaje_messages` at agent->llm pre_model — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.); AI_APP_SEC_028 (Do not use LLMs from the organization's disallowed list); AI_APP_SEC_070 (Detect and block all forms of prompt injection attacks in user inputs and file contents). Mask/block; do not remove without review. site_id='site:sha256:ffbec5b79200e3f8511a26f81e634698b2b70ec6015beb5ba68e24ea9ae97360'
+        _gr_client = _lineaje_load_gr_client()
+        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:ffbec5b79200e3f8511a26f81e634698b2b70ec6015beb5ba68e24ea9ae97360', phase='pre_model', boundary={'source': 'agent_message', 'sink': 'model'}, candidate_policies=[{'policy_id': 'AI_APP_SEC_006', 'guardrail_id': 'Enforce Approved LLM.', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_APP_SEC_028', 'guardrail_id': 'Enforce Approved LLM', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_APP_SEC_070', 'guardrail_id': 'Sanitize Prompt Injection', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_DAT_SEC_011', 'guardrail_id': 'Redact PII', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_DAT_SEC_029', 'guardrail_id': 'Emit immutable, forensic-ready audit records for all AI decisions.', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='llm')
+        try:
+            _lineaje_messages = await __import__('asyncio').to_thread(lambda: _gr_client.enforce(_gr_site, _lineaje_messages, content_type='application/json', variable_name='_lineaje_messages', source_file=__file__, before_line=27))
+        except _gr_client.GuardrailUnavailableError:
+            pass
+        except PermissionError:
+            raise
+        return await self.call_openrouter_model(
+            messages=_lineaje_messages,
             temperature=0.2,
             max_tokens=180,
         )
@@ -44,6 +67,15 @@ class SchedulingAgent(AcmeLoanAgentFramework):
     async def handle(self, context: dict[str, Any]) -> dict[str, Any]:
         user_message = context.get("user_message", "")
         meeting_reference = extract_reference_number(user_message, prefix="MEET")
+        # LINEAJE: enforce() `user_message` at agent->llm pre_model — scan flagged AI_APP_SEC_006 (Use only LLMs from the organization's approved list.); AI_APP_SEC_028 (Do not use LLMs from the organization's disallowed list); AI_APP_SEC_070 (Detect and block all forms of prompt injection attacks in user inputs and file contents). Mask/block; do not remove without review. site_id='site:sha256:ffe1354837ce0346bb61aa5011bbf7b31273aaf3703463eb21d4ffebb0fb0958'
+        _gr_client = _lineaje_load_gr_client()
+        _gr_site = _gr_client.SiteDescriptor(site_id='site:sha256:ffe1354837ce0346bb61aa5011bbf7b31273aaf3703463eb21d4ffebb0fb0958', phase='pre_model', boundary={'source': 'agent_message', 'sink': 'model'}, candidate_policies=[{'policy_id': 'AI_APP_SEC_006', 'guardrail_id': 'Enforce Approved LLM.', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_APP_SEC_028', 'guardrail_id': 'Enforce Approved LLM', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_APP_SEC_070', 'guardrail_id': 'Sanitize Prompt Injection', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_DAT_SEC_011', 'guardrail_id': 'Redact PII', 'policy_version': '2026.08.1'}, {'policy_id': 'AI_DAT_SEC_029', 'guardrail_id': 'Emit immutable, forensic-ready audit records for all AI decisions.', 'policy_version': '2026.08.1'}], fail_mode='BLOCK', source_type='agent', destination_type='llm')
+        try:
+            user_message = await __import__('asyncio').to_thread(lambda: _gr_client.enforce(_gr_site, user_message, content_type='application/json', variable_name='user_message', source_file=__file__, before_line=46))
+        except _gr_client.GuardrailUnavailableError:
+            pass
+        except PermissionError:
+            raise
         model_output = await self.call_agent_model(user_message, meeting_reference)
 
         mcp_activity = await asyncio.gather(
