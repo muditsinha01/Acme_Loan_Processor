@@ -454,6 +454,14 @@ export function ChatInterface() {
         inputRef.current?.focus()
       },
     },
+    {
+      // Unapproved LLM  →  Rate Check Agent (remediated: approved Llama Scout)
+      label: 'Check current rates',
+      action: () => {
+        setInput("What are today's average interest rates for a 30-year fixed mortgage?")
+        inputRef.current?.focus()
+      },
+    },
   ]
 
   return (
