@@ -35,9 +35,51 @@ _INJECTION_PATTERNS = [
         ),
     ),
     (
+        "instruction override",
+        re.compile(
+            r"\b(?:supersed(?:e|es|ing)|outranks?|takes?\s+precedence\s+over)\b[^.\n]{0,40}"
+            r"\b(?:user|prompts?|instructions?|chat)\b"
+            r"|\boverride[_\s]user\b",
+            re.IGNORECASE,
+        ),
+    ),
+    (
         "injected instructions",
         re.compile(
-            r"\b(?:new|updated|real)\s+instructions?\s*:|\byou\s+(?:must|should)\s+now\b|\bdo\s+not\s+summari[sz]e\b",
+            r"\b(?:new|updated|real)\s+instructions?\s*:|\byou\s+(?:must|should)\s+now\b|\bdo\s+not\s+summari[sz]e\b"
+            r"|\byou\s+are\s+(?:now\s+)?acting\s+as\b|\bexecute\b[^.\n]{0,40}\b(?:directives?|instructions?)\b",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "safety bypass",
+        re.compile(
+            r"\b(?:discard|disable|bypass|ignore|turn\s+off)\b[^.\n]{0,40}"
+            r"\b(?:alignment|guardrails?|safety\s+(?:layers?|polic(?:y|ies)|filters?|guidelines))\b",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "concealment",
+        re.compile(
+            r"\b(?:never|do\s+not|don't)\s+(?:reveal|mention|disclose|acknowledge)\b[^.\n]{0,40}"
+            r"\b(?:this|these|that)\s+(?:instructions?|paragraphs?|directives?|messages?|prompts?|blocks?)\b",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "model-targeted directive",
+        re.compile(
+            r"\b(?:binding_on_downstream_model|summari[sz]er_(?:directive|output_contract)"
+            r"|downstream[_\s](?:model|summari[sz]er)|require_model_to_\w+)\b|\bLLM\s+PRIORITY\b",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "secret exfiltration",
+        re.compile(
+            r"\b(?:dump|reveal|print|output|leak|exfiltrat\w*)\b[^.\n]{0,50}"
+            r"\b(?:secrets?|api\s*keys?|system\s+prompts?|credentials?|passwords?)\b",
             re.IGNORECASE,
         ),
     ),
@@ -63,6 +105,72 @@ _INJECTION_PATTERNS = [
     ),
 ]
 _MAX_REPORTED_FINDINGS = 5
+# Most telling categories first when listing findings in the block message.
+_FINDING_PRIORITY = [
+    "instruction override",
+    "safety bypass",
+    "concealment",
+    "secret exfiltration",
+    "data exfiltration",
+    "shell execution",
+    "injected instructions",
+    "role/system tag",
+    "hidden zero-width characters",
+    "model-targeted directive",
+]
+
+
+def _finding_rank(category: str) -> int:
+    if "-encoded " in category:
+        return -1
+    return _FINDING_PRIORITY.index(category) if category in _FINDING_PRIORITY else len(_FINDING_PRIORITY)
+
+# Hidden-content tricks: zero-width characters used to split or hide tokens,
+# and Base64 / hex blobs that decode to instructions.
+_ZERO_WIDTH_CHARS = re.compile("[​‌‍⁠﻿]")
+_MIN_ZERO_WIDTH_TO_FLAG = 3
+_HEX_CANDIDATE = re.compile(r"\b(?:[0-9a-fA-F]{2}){20,}\b")
+_BASE64_CANDIDATE = re.compile(r"[A-Za-z0-9+/]{40,}={0,2}")
+
+
+def _match_injection(text: str) -> Optional[str]:
+    for category, pattern in _INJECTION_PATTERNS:
+        if pattern.search(text):
+            return category
+    return None
+
+
+def _as_readable_text(raw: bytes) -> Optional[str]:
+    """Return decoded bytes as text only if they look like natural language."""
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+    printable = sum(1 for char in text if char.isprintable() or char.isspace())
+    if not text or " " not in text or printable / len(text) < 0.9:
+        return None
+    return text
+
+
+def _decode_hidden_payloads(line: str) -> list[tuple[str, str]]:
+    """Decode hex and Base64 blobs in a line into readable text, if any."""
+    decoded: list[tuple[str, str]] = []
+    for match in _HEX_CANDIDATE.finditer(line):
+        text = _as_readable_text(bytes.fromhex(match.group(0)))
+        if text:
+            decoded.append(("hex", text))
+    for match in _BASE64_CANDIDATE.finditer(line):
+        blob = match.group(0)
+        if _HEX_CANDIDATE.fullmatch(blob):
+            continue
+        try:
+            raw = base64.b64decode(blob + "=" * (-len(blob) % 4))
+        except ValueError:
+            continue
+        text = _as_readable_text(raw)
+        if text:
+            decoded.append(("base64", text))
+    return decoded
 
 
 class FileProcessorAgent(PolicyProbeAgentFramework):
@@ -214,18 +322,47 @@ class FileProcessorAgent(PolicyProbeAgentFramework):
         for file_data in file_contents:
             filename = file_data.get("filename", "unknown")
             for raw_line in (file_data.get("extracted_content") or "").splitlines():
-                line = raw_line.strip()
+                zero_width_count = len(_ZERO_WIDTH_CHARS.findall(raw_line))
+                line = _ZERO_WIDTH_CHARS.sub("", raw_line).strip()
                 if not line:
                     continue
-                for category, pattern in _INJECTION_PATTERNS:
-                    if pattern.search(line):
-                        findings.append({"filename": filename, "category": category, "line": line})
+
+                category = _match_injection(line)
+                if category:
+                    findings.append({"filename": filename, "category": category, "line": line})
+                    continue
+                if zero_width_count >= _MIN_ZERO_WIDTH_TO_FLAG:
+                    findings.append(
+                        {"filename": filename, "category": "hidden zero-width characters", "line": line}
+                    )
+                    continue
+                for encoding, decoded_text in _decode_hidden_payloads(line):
+                    category = _match_injection(decoded_text)
+                    if category:
+                        findings.append(
+                            {
+                                "filename": filename,
+                                "category": f"{encoding}-encoded {category}",
+                                "line": f"decodes to: {decoded_text.strip()}",
+                            }
+                        )
                         break
         return findings
 
     def build_injection_block_response(self, findings: list[dict[str, str]]) -> str:
+        # One example per category first (most telling first), then the rest.
+        ordered = sorted(findings, key=lambda finding: _finding_rank(finding["category"]))
+        seen_categories: set[str] = set()
+        first_per_category, remainder = [], []
+        for finding in ordered:
+            if finding["category"] in seen_categories:
+                remainder.append(finding)
+            else:
+                seen_categories.add(finding["category"])
+                first_per_category.append(finding)
+
         flagged_lines = []
-        for finding in findings[:_MAX_REPORTED_FINDINGS]:
+        for finding in (first_per_category + remainder)[:_MAX_REPORTED_FINDINGS]:
             line = finding["line"]
             if len(line) > 160:
                 line = line[:157] + "..."
