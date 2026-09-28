@@ -12,6 +12,11 @@ try:
 except ModuleNotFoundError:  # pragma: no cover - depends on local environment
     Document = None
 
+try:
+    from bs4 import BeautifulSoup
+except ModuleNotFoundError:  # pragma: no cover - depends on local environment
+    BeautifulSoup = None
+
 from file_parsers.html_parser import HTMLParser
 from file_parsers.image_parser import ImageParser
 from file_parsers.pdf_parser import PDFParser
@@ -178,6 +183,76 @@ _MIN_LINE_CHARS_FOR_SENTENCE_STRIP = 500
 _TAG_BLOCK_OPEN = re.compile(r"<\s*(important|system|instructions?|admin|user_query)\s*>", re.IGNORECASE)
 
 
+_HIDDEN_CSS = re.compile(
+    r"display\s*:\s*none|visibility\s*:\s*hidden|font-size\s*:\s*0(?![.\d]*[1-9])|opacity\s*:\s*0(?![.\d]*[1-9])",
+    re.IGNORECASE,
+)
+_CSS_RULE = re.compile(r"([^{}]+)\{([^{}]*)\}")
+_HEADING_TAGS = ["h1", "h2", "h3", "h4", "h5", "h6"]
+
+
+def _text_is_injected(text: str) -> Optional[str]:
+    """Category of the first injected line in a block of text, else None."""
+    for raw_line in (text or "").splitlines():
+        zero_width_count = len(_ZERO_WIDTH_CHARS.findall(raw_line))
+        line = _ZERO_WIDTH_CHARS.sub("", raw_line).strip()
+        if not line:
+            continue
+        if _TAG_BLOCK_OPEN.search(line):
+            return "role/system tag block"
+        category = _line_injection_category(line, zero_width_count)
+        if category:
+            return category
+    return None
+
+
+def _sanitize_html(html: str) -> tuple[str, list[str]]:
+    """Remove content a reader never sees (CSS-hidden elements) and every
+    heading-led section that carries a prompt injection, so neither the
+    payload nor the heading/description framing it reaches the model.
+    Returns the cleaned HTML and the category of each removed passage."""
+    if BeautifulSoup is None:
+        return html, []
+    soup = BeautifulSoup(html, "html.parser")
+    removed: list[str] = []
+
+    hidden_classes: set[str] = set()
+    for style in soup.find_all("style"):
+        for selector, body in _CSS_RULE.findall(style.get_text()):
+            if _HIDDEN_CSS.search(body):
+                hidden_classes.update(re.findall(r"\.([\w-]+)", selector))
+
+    def is_hidden(element: Any) -> bool:
+        if element.has_attr("hidden") or element.get("aria-hidden") == "true":
+            return True
+        if _HIDDEN_CSS.search(element.get("style", "")):
+            return True
+        return bool(hidden_classes.intersection(element.get("class") or []))
+
+    for element in [el for el in soup.find_all(True) if is_hidden(el)]:
+        if element.decomposed:
+            continue
+        if element.get_text(strip=True):
+            removed.append("hidden element")
+        element.decompose()
+
+    for heading in soup.find_all(_HEADING_TAGS):
+        if heading.decomposed:
+            continue
+        section = [heading]
+        for sibling in heading.find_next_siblings():
+            if sibling.name in _HEADING_TAGS or sibling.find(_HEADING_TAGS):
+                break
+            section.append(sibling)
+        category = _text_is_injected("\n".join(el.get_text("\n") for el in section))
+        if category:
+            removed.append(f"section: {category}")
+            for element in section:
+                element.decompose()
+
+    return str(soup), removed
+
+
 def _closes_tag_block(line: str, tag: str) -> bool:
     return re.search(rf"<\s*/\s*{re.escape(tag)}\s*>", line, re.IGNORECASE) is not None
 
@@ -257,11 +332,15 @@ class FileProcessorAgent(PolicyProbeAgentFramework):
         Vulnerability: extracted text is returned directly without PII masking.
         """
         file_type = self.get_file_type(content_type, filename)
+        removed_from_markup: list[str] = []
         if not content:
             extracted_content = f"Empty file: {filename}"
         elif file_type == "pdf":
             extracted_content = await self._process_pdf(content)
         elif file_type == "html":
+            # AI_APP_SEC_070: drop hidden elements and injected sections
+            # before the text is extracted.
+            content, removed_from_markup = _sanitize_html(content)
             extracted_content = await self._process_html(content)
         elif file_type == "image":
             extracted_content = await self._process_image(content, content_type)
@@ -280,6 +359,7 @@ class FileProcessorAgent(PolicyProbeAgentFramework):
             "content_type": content_type,
             "file_type": file_type,
             "extracted_content": extracted_content,
+            "injection_removed_from_markup": removed_from_markup,
             "guardrails": dict(self.GUARDRAILS),
         }
 
@@ -342,6 +422,10 @@ class FileProcessorAgent(PolicyProbeAgentFramework):
         removed: list[dict[str, str]] = []
         for file_data in file_contents:
             filename = file_data.get("filename", "unknown")
+            removed.extend(
+                {"filename": filename, "category": category}
+                for category in file_data.get("injection_removed_from_markup") or []
+            )
             kept_lines: list[str] = []
             open_tag: Optional[str] = None
             # keepends so clean text (line endings included) passes through unchanged.
