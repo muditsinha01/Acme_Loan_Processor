@@ -12,6 +12,8 @@ from pathlib import Path
 
 import httpx
 
+from .unifai_guard import sanitize_prompt, find_prompt_attacks, redact_pii, mask_pii, sanitize_messages, find_code_execution, remove_suspicious_content, remove_hidden_prompts, remove_encoded_prompts, remove_leetspeak_prompts, find_command_requests
+
 from .config import openrouter_key
 
 AGENT_NAME = "DTI Agent"
@@ -78,8 +80,13 @@ def flag_for_review(reason: str) -> dict:
 
 async def handle(message: str) -> dict:
     """Calculates the DTI. The answer is shown to the user in the chat UI."""
+    message = sanitize_prompt(message)
     expression = (await call_model(SYSTEM_PROMPT, message)).strip().strip("`").strip()
+    if find_code_execution(expression):
+        expression = remove_suspicious_content(expression).strip().strip("`").strip()
     if not expression:
+        return flag_for_review("The model's formula was removed because it contained code execution.")
+    if find_code_execution(expression):
         return flag_for_review("The model's formula was removed because it contained code execution.")
     result = run_formula(expression)
     if "error" in result:
